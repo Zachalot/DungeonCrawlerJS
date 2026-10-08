@@ -1,23 +1,29 @@
 import { Camera } from "./camera.js";
 import { MAX_FRAME_TIME, UPDATE_HZ } from "./config.js";
-import { Player } from "./entities/player.js";
+import { WEAPONS, WEAPON_ORDER } from "./data/weapons.js";
+import { Game } from "./game.js";
 import { Input } from "./input.js";
-import { drawLabels, drawPlayer, drawWorld } from "./render.js";
+import { drawEffects, drawEntities, drawLabels, drawProjectiles, drawWorld } from "./render.js";
 import { randomSeed } from "./rng.js";
 import { Hud } from "./ui/hud.js";
-import { VILLAGE_SPAWN } from "./world/village.js";
-import { World } from "./world/world.js";
+import { Toasts } from "./ui/toast.js";
 
 const STEP = 1 / UPDATE_HZ;
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const world = new World(resolveSeed());
-const player = new Player(VILLAGE_SPAWN.x, VILLAGE_SPAWN.y);
+const game = new Game(resolveSeed());
+window.game = game; // console debugging until the M7 dev panel
 const camera = new Camera();
 const input = new Input(canvas);
-const hud = new Hud(document.getElementById("debug"));
+const hud = new Hud({
+  debug: document.getElementById("debug"),
+  hpBar: document.getElementById("hp-bar"),
+  manaBar: document.getElementById("mana-bar"),
+  weapons: document.getElementById("weapons"),
+});
+const toasts = new Toasts(document.getElementById("toasts"));
 
 document.getElementById("new-world").addEventListener("click", () => {
   location.search = `?seed=${randomSeed()}`;
@@ -25,6 +31,7 @@ document.getElementById("new-world").addEventListener("click", () => {
 
 window.addEventListener("resize", resize);
 resize();
+syncCamera(0);
 
 let lastTime = performance.now();
 let accumulator = 0;
@@ -36,22 +43,41 @@ function frame(now) {
   accumulator += frameTime;
 
   while (accumulator >= STEP) {
-    const aim = camera.screenToWorld(input.mouse.x, input.mouse.y);
-    player.update(STEP, input.moveVector(), aim, world);
+    game.update(STEP, readControls());
     accumulator -= STEP;
+  }
+  for (const event of game.events.splice(0)) {
+    if (event.type === "toast") toasts.show(event.text);
   }
 
   const alpha = accumulator / STEP;
-  const view = player.renderPosition(alpha);
-  camera.follow(view.x, view.y);
+  syncCamera(alpha);
 
   ctx.clearRect(0, 0, camera.width, camera.height);
-  drawWorld(ctx, world, camera);
-  drawLabels(ctx, world, camera);
-  drawPlayer(ctx, player, alpha, camera);
-  hud.update(frameTime, world, player);
+  drawWorld(ctx, game.world, camera);
+  drawProjectiles(ctx, game.projectiles, alpha, camera);
+  drawEntities(ctx, game, alpha, camera);
+  drawEffects(ctx, game.effects, camera);
+  drawLabels(ctx, game.world, camera);
+  hud.update(frameTime, game);
 
   requestAnimationFrame(frame);
+}
+
+// Follows the player and shares the view with the game so zombies never spawn on screen.
+function syncCamera(alpha) {
+  const target = game.player.renderPosition(alpha);
+  camera.follow(target.x, target.y);
+  game.view = { x: camera.x, y: camera.y, width: camera.width, height: camera.height };
+}
+
+function readControls() {
+  return {
+    move: input.moveVector(),
+    aim: camera.screenToWorld(input.mouse.x, input.mouse.y),
+    attack: input.isAttacking(),
+    weapon: WEAPON_ORDER.find((id) => input.keys.has(WEAPONS[id].key)) ?? null,
+  };
 }
 
 function resize() {

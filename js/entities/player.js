@@ -1,4 +1,5 @@
-import { PLAYER_SIZE, PLAYER_SPEED, TILE_SIZE } from "../config.js";
+import { PLAYER_SIZE, PLAYER_SPEED, STARTING_ARROWS, STARTING_STATS, TILE_SIZE } from "../config.js";
+import { maxHp, maxMana } from "../systems/stats.js";
 import { moveAndCollide } from "../world/collision.js";
 
 export class Player {
@@ -9,9 +10,22 @@ export class Player {
     this.prevY = y;
     this.half = (PLAYER_SIZE * TILE_SIZE) / 2;
     this.aimAngle = 0;
+
+    this.stats = { ...STARTING_STATS };
+    this.hp = maxHp(this.stats);
+    this.mana = maxMana(this.stats);
+    this.arrows = STARTING_ARROWS;
+    this.armor = 0; // from equipment in M4
+
+    this.weapon = "sword";
+    this.attackCooldown = 0; // s until the next attack is allowed
+    this.iframes = 0; // s of remaining invulnerability
+    this.flash = 0; // s of remaining hit flash
+    this.lastCombatTime = -Infinity;
+    this.regenRemainder = { hp: 0, mana: 0 };
   }
 
-  /** Advances one fixed step; `move` is a direction vector, `aim` a world-px point. */
+  /** Advances movement and aim one fixed step; `move` is a direction vector, `aim` a world-px point. */
   update(dt, move, aim, world) {
     this.prevX = this.x;
     this.prevY = this.y;
@@ -30,6 +44,12 @@ export class Player {
       x: this.prevX + (this.x - this.prevX) * alpha,
       y: this.prevY + (this.y - this.prevY) * alpha,
     };
+  }
+
+  /** Moves to a point without interpolating from the old position. */
+  teleport(x, y) {
+    this.x = this.prevX = x;
+    this.y = this.prevY = y;
   }
 
   get tileX() {

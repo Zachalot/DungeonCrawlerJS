@@ -24,6 +24,19 @@ const COLORS = {
   aim: "#f8fafc",
   label: "#f8fafc",
   labelShadow: "rgba(0, 0, 0, 0.75)",
+  shadow: "rgba(0, 0, 0, 0.25)",
+  zombie: "#6b8f5e",
+  zombieOutline: "#2f4a28",
+  zombieWindup: "#c2563f",
+  zombieEyes: "#fde047",
+  hpBack: "rgba(0, 0, 0, 0.6)",
+  hpFill: "#ef4444",
+  flash: "#ffffff",
+  arrowShaft: "#c8a26a",
+  arrowTip: "#d1d5db",
+  fireballCore: "#fde68a",
+  fireballOuter: "#f97316",
+  swing: "rgba(255, 255, 255, 0.35)",
 };
 
 /** Draws every tile intersecting the camera view. */
@@ -61,18 +74,98 @@ export function drawLabels(ctx, world, camera) {
   drawLabel(ctx, "Village (safe zone)", VILLAGE_CENTER_TILE * T - camera.x, VILLAGE_ORIGIN * T - camera.y - 6);
 }
 
-export function drawPlayer(ctx, player, alpha, camera) {
+/** Draws the player and zombies, sorted by y so lower sprites overlap higher ones. */
+export function drawEntities(ctx, game, alpha, camera) {
+  const drawables = [
+    { y: game.player.y, draw: () => drawPlayer(ctx, game.player, alpha, camera) },
+    ...game.zombies.map((z) => ({ y: z.y, draw: () => drawZombie(ctx, z, alpha, camera) })),
+  ];
+  drawables.sort((a, b) => a.y - b.y);
+  for (const d of drawables) d.draw();
+}
+
+export function drawProjectiles(ctx, projectiles, alpha, camera) {
+  for (const p of projectiles) {
+    const pos = p.renderPosition(alpha);
+    const sx = pos.x - camera.x;
+    const sy = pos.y - camera.y;
+    if (p.kind === "fireball") {
+      ctx.fillStyle = COLORS.fireballOuter;
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.radius + 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = COLORS.fireballCore;
+      ctx.beginPath();
+      ctx.arc(sx, sy, p.radius - 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const cos = Math.cos(p.angle);
+      const sin = Math.sin(p.angle);
+      ctx.strokeStyle = COLORS.arrowShaft;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx - cos * 10, sy - sin * 10);
+      ctx.lineTo(sx + cos * 4, sy + sin * 4);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.arrowTip;
+      ctx.beginPath();
+      ctx.moveTo(sx + cos * 8, sy + sin * 8);
+      ctx.lineTo(sx + cos * 3 - sin * 3, sy + sin * 3 + cos * 3);
+      ctx.lineTo(sx + cos * 3 + sin * 3, sy + sin * 3 - cos * 3);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+}
+
+/** Sword swings, impact puffs, and floating damage numbers. */
+export function drawEffects(ctx, effects, camera) {
+  for (const s of effects.swings) {
+    const t = s.age / s.life;
+    ctx.fillStyle = COLORS.swing;
+    ctx.globalAlpha = 1 - t;
+    ctx.beginPath();
+    ctx.moveTo(s.x - camera.x, s.y - camera.y);
+    ctx.arc(s.x - camera.x, s.y - camera.y, s.radius, s.angle - s.arc / 2, s.angle + s.arc / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  for (const p of effects.puffs) {
+    const t = p.age / p.life;
+    ctx.globalAlpha = 1 - t;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x - camera.x, p.y - camera.y, 4 + t * 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.font = "bold 14px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  for (const e of effects.texts) {
+    const t = e.age / e.life;
+    const x = e.x - camera.x;
+    const y = e.y - camera.y - 4 - t * 24;
+    ctx.globalAlpha = 1 - t * t;
+    ctx.fillStyle = COLORS.labelShadow;
+    ctx.fillText(e.text, x + 1, y + 1);
+    ctx.fillStyle = e.color;
+    ctx.fillText(e.text, x, y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPlayer(ctx, player, alpha, camera) {
   const pos = player.renderPosition(alpha);
   const sx = pos.x - camera.x;
   const sy = pos.y - camera.y;
   const r = player.half;
 
-  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-  ctx.beginPath();
-  ctx.ellipse(sx, sy + r * 0.8, r * 0.9, r * 0.4, 0, 0, Math.PI * 2);
-  ctx.fill();
+  drawShadow(ctx, sx, sy, r);
+  // Flicker while invulnerable.
+  if (player.iframes > 0 && Math.floor(player.iframes * 16) % 2 === 0) ctx.globalAlpha = 0.4;
 
-  ctx.fillStyle = COLORS.player;
+  ctx.fillStyle = player.flash > 0.4 ? COLORS.flash : COLORS.player;
   ctx.strokeStyle = COLORS.playerOutline;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -90,6 +183,62 @@ export function drawPlayer(ctx, player, alpha, camera) {
   ctx.lineTo(sx + Math.cos(a + 0.45) * base, sy + Math.sin(a + 0.45) * base);
   ctx.lineTo(sx + Math.cos(a - 0.45) * base, sy + Math.sin(a - 0.45) * base);
   ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawZombie(ctx, zombie, alpha, camera) {
+  const pos = zombie.renderPosition(alpha);
+  const sx = pos.x - camera.x;
+  const sy = pos.y - camera.y;
+  const winding = zombie.state === "windup";
+  const r = zombie.half * (winding ? 1.12 : 1);
+
+  drawShadow(ctx, sx, sy, zombie.half);
+
+  // Arms reach toward the facing direction, further during the windup telegraph.
+  const reach = winding ? r + 8 : r + 3;
+  ctx.strokeStyle = COLORS.zombieOutline;
+  ctx.lineWidth = 4;
+  for (const side of [-0.5, 0.5]) {
+    const ax = sx + Math.cos(zombie.facing + side) * (r - 2);
+    const ay = sy + Math.sin(zombie.facing + side) * (r - 2);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + Math.cos(zombie.facing) * (reach - r + 4), ay + Math.sin(zombie.facing) * (reach - r + 4));
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = zombie.flash > 0 ? COLORS.flash : winding ? COLORS.zombieWindup : COLORS.zombie;
+  ctx.strokeStyle = COLORS.zombieOutline;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = COLORS.zombieEyes;
+  for (const side of [-0.45, 0.45]) {
+    ctx.beginPath();
+    ctx.arc(sx + Math.cos(zombie.facing + side) * r * 0.55, sy + Math.sin(zombie.facing + side) * r * 0.55, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (zombie.hp < zombie.def.hp) {
+    const width = zombie.half * 2;
+    const x = sx - zombie.half;
+    const y = sy - zombie.half - 8;
+    ctx.fillStyle = COLORS.hpBack;
+    ctx.fillRect(x, y, width, 4);
+    ctx.fillStyle = COLORS.hpFill;
+    ctx.fillRect(x, y, width * Math.max(0, zombie.hp / zombie.def.hp), 4);
+  }
+}
+
+function drawShadow(ctx, sx, sy, r) {
+  ctx.fillStyle = COLORS.shadow;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + r * 0.8, r * 0.9, r * 0.4, 0, 0, Math.PI * 2);
   ctx.fill();
 }
 

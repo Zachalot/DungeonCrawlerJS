@@ -22,6 +22,18 @@ The world seed is in the URL (`?seed=42`). Refreshing keeps the same world, and 
 |---|---|
 | WASD / arrow keys | Move |
 | Mouse | Aim |
+| Left click / Space (hold) | Attack |
+| 1 / 2 / 3 | Sword / Bow / Staff |
+
+| Weapon | Damage | Cost | Notes |
+|---|---|---|---|
+| Sword | STR × 1 | free | 90° cleave, knockback, 0.4 s |
+| Bow | floor(DEX × 1.5) | 1 arrow | 8-tile range, 0.6 s |
+| Staff | floor(INT × 1.5) | 5 mana | 7-tile range, 0.8 s |
+
+Level 1 Zombies have 10 HP and deal 2 damage. Watch for the red windup: stepping back before it ends dodges the hit. They can't enter the village, and they give up the chase if you go inside.
+
+For debugging, the running game is exposed as `window.game` in the browser console. For example, `game.player.arrows = 99`.
 
 ## Tests
 
@@ -36,21 +48,27 @@ The tests use Node's built-in test runner (Node 20+) and cover:
 - The world border
 - Reachability of every dungeon from the spawn point
 - Collision
+- Armor mitigation math, weapon damage and costs, sword arc and knockback, projectiles
+- Zombie AI states, windup timing, de-aggro, spawning and respawn timers
+- Regen rates, i-frames, and respawn
 
 ## Project layout
 
 ```
 index.html, css/style.css
 js/
-  main.js         boot + fixed-timestep game loop
+  main.js         boot, fixed-timestep loop, input → controls
+  game.js         DOM-free simulation: combat, zombies, projectiles, respawn
   config.js       every tunable constant
+  data/           weapon and enemy definitions
   rng.js          seeded PRNG + coordinate hash
   input.js        keyboard/mouse state
   camera.js       follow + world clamp
   render.js       canvas drawing
-  entities/       player
-  world/          chunks, tiles, village, dungeon placement, bounds, collision
-  ui/             HUD
+  entities/       player, zombie, projectile
+  systems/        combat math, stats, regen, spawner, effects
+  world/          chunks, tiles, village, dungeon placement, bounds, collision, line of sight
+  ui/             HUD, toasts
 tests/            node:test suites
 ```
 
@@ -59,7 +77,7 @@ tests/            node:test suites
 | # | Milestone | Status |
 |---|---|---|
 | M1 | World + movement | ✅ Done |
-| M2 | Combat | |
+| M2 | Combat | ✅ Done (includes regen; death respawns you in the village with no penalty until M6) |
 | M3 | Progression | |
 | M4 | Items + vendors | |
 | M5 | Dungeons | |

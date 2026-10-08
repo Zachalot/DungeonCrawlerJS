@@ -11,19 +11,29 @@ const PREVENT_DEFAULT = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRigh
 export class Input {
   constructor(canvas) {
     this.keys = new Set();
-    this.mouse = { x: 0, y: 0 }; // CSS px relative to the canvas
+    this.mouse = { x: 0, y: 0, down: false }; // CSS px relative to the canvas
 
     window.addEventListener("keydown", (e) => {
       if (PREVENT_DEFAULT.has(e.code)) e.preventDefault();
       this.keys.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
-    window.addEventListener("blur", () => this.keys.clear());
+    window.addEventListener("blur", () => {
+      this.keys.clear();
+      this.mouse.down = false;
+    });
     canvas.addEventListener("mousemove", (e) => {
       const rect = canvas.getBoundingClientRect();
       this.mouse.x = e.clientX - rect.left;
       this.mouse.y = e.clientY - rect.top;
     });
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.button === 0) this.mouse.down = true;
+    });
+    window.addEventListener("mouseup", (e) => {
+      if (e.button === 0) this.mouse.down = false;
+    });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
   isDown(action) {
@@ -36,5 +46,10 @@ export class Input {
       x: (this.isDown("right") ? 1 : 0) - (this.isDown("left") ? 1 : 0),
       y: (this.isDown("down") ? 1 : 0) - (this.isDown("up") ? 1 : 0),
     };
+  }
+
+  /** Held attack: left mouse or Space. */
+  isAttacking() {
+    return this.mouse.down || this.keys.has("Space");
   }
 }

@@ -16,6 +16,19 @@ export function overlapsSolid(world, body) {
   return findBlockingTile(world, body, "x", 0) !== null;
 }
 
+/** True if no solid tile lies on the segment between two world-px points. */
+export function hasLineOfSight(world, x0, y0, x1, y1) {
+  const distance = Math.hypot(x1 - x0, y1 - y0);
+  const steps = Math.ceil(distance / (TILE_SIZE / 4));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const x = x0 + (x1 - x0) * t;
+    const y = y0 + (y1 - y0) * t;
+    if (world.isSolidAt(Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE))) return false;
+  }
+  return true;
+}
+
 function moveAxis(world, body, axis, delta) {
   if (delta === 0) return;
   body[axis] += delta;

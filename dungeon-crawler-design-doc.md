@@ -221,7 +221,7 @@ Chest contents are rolled once when the chest is first opened, and the result is
 | Property | Value |
 |---|---|
 | HP | 10 |
-| Damage | **2** (melee, contact range ~0.8 tiles) |
+| Damage | **2** (melee; attack range 1.0 tile center to center, stops advancing at 0.75) |
 | Attack cooldown | 1.0 s (plus a 0.25 s wind-up so the player can react) |
 | Move speed | 60% of player speed |
 | Aggro radius | 6 tiles (requires line of sight) |
@@ -234,8 +234,8 @@ Chest contents are rolled once when the chest is first opened, and the result is
 **AI states:**
 - `idle`: wander within 3 tiles of spawn.
 - `chase`: move straight at the player, sliding along obstacles. No A* in the POC.
-- `windup` → `attack`: when in range and off cooldown.
-- `return`: walk back to spawn after de-aggro, healing to full HP.
+- `windup` → `attack`: when in range and off cooldown. The hit lands only if the player is still within 1.25× attack range when the windup ends, so stepping back dodges it. A sword knockback interrupts the windup.
+- `return`: walk back to spawn after de-aggro, healing to full HP. Any hit re-provokes a chase.
 
 **Overworld respawn:** a dead zombie's spawn point reactivates after 120 s, but only while the point is off-screen.
 
@@ -243,9 +243,11 @@ Chest contents are rolled once when the chest is first opened, and the result is
 Enemies are defined in `data/enemies.js`:
 ```js
 { id: "zombie_l1", name: "Zombie", level: 1, hp: 10, damage: 2, speed: 0.6,
-  aggroRadius: 6, deaggroRadius: 12, attackRange: 0.8, attackCooldown: 1.0,
-  windup: 0.25, xp: 10, dropTable: "zombie_common", ai: "melee_chaser" }
+  aggroRadius: 6, deaggroRadius: 12, attackRange: 1.0, stopDistance: 0.75,
+  attackCooldown: 1.0, windup: 0.25, xp: 10, dropTable: "zombie_common" }
 ```
+
+**Simulation scope:** only zombies whose spawn point is within 1 chunk of the player's chunk are alive. Calm (idle or returning) zombies more than 2 chunks away despawn, and their spawn point refills when the player comes back. This keeps about 30–60 zombies simulated instead of all ~640.
 New enemy types are added as data entries, optionally with a new `ai` behavior. Future zombie levels (`zombie_l2`, …) get picked by `dungeonLevel`.
 
 ---
@@ -481,8 +483,8 @@ js/
 | # | Milestone | Done when |
 |---|---|---|
 | M1 | World + movement | Seeded chunked overworld, village, rocks and trees render; the player walks with collision; the camera follows |
-| M2 | Combat | Sword (cleave + knockback), bow (arrows), and staff (mana) work; Level 1 Zombies chase, wind up, attack, and die; i-frames and damage numbers work |
-| M3 | Progression | XP, level-up full heal, stat allocation with preview, regen, Respec Trainer |
+| M2 | Combat | Sword (cleave + knockback), bow (arrows), and staff (mana) work; Level 1 Zombies chase, wind up, attack, and die; i-frames and damage numbers work. *Regen was pulled forward from M3 so the staff stays usable, and death temporarily respawns you in the village with no penalty until M6.* |
+| M3 | Progression | XP, level-up full heal, stat allocation with preview, Respec Trainer |
 | M4 | Items + vendors | Inventory, equipment, armor mitigation, both vendors with buyback, potions with cooldown, stash |
 | M5 | Dungeons | Entrances spawn per cell, dungeons generate, chest loot works, cleared state, level label on entrances |
 | M6 | Persistence + death | Save slots, autosave triggers, migration, export/import, graves with one-grave rule |
