@@ -14,7 +14,19 @@
       <button id="new-world" class="btn" type="button">New world</button>
     </div>
 
-    <div id="controls" class="panel">WASD / Arrows: move &middot; Mouse: aim</div>
+    <div id="toasts"></div>
+
+    <div id="hud-bottom">
+      <div class="bars panel">
+        <div id="hp-bar" class="bar hp"><div class="fill"></div><span class="label"></span></div>
+        <div id="mana-bar" class="bar mana"><div class="fill"></div><span class="label"></span></div>
+      </div>
+      <div id="weapons" class="weapons"></div>
+    </div>
+
+    <div id="controls" class="panel">
+      WASD / Arrows: move &middot; Mouse: aim &middot; Click / Space: attack &middot; 1 / 2 / 3: sword / bow / staff
+    </div>
 
     <div id="file-warning" class="panel warning" hidden>
       This game must be served over HTTP. Browsers block ES modules on <code>file://</code>.<br />

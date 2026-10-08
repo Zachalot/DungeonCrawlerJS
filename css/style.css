@@ -5,6 +5,7 @@
   --text-dim: #9ca3af;
   --accent: #3b82f6;
   --warning: #f59e0b;
+  --danger: #f87171;
   --font: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
@@ -81,10 +82,151 @@ body {
   border-color: var(--accent);
 }
 
-#controls {
+#hud-bottom {
   position: fixed;
   bottom: 12px;
-  left: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  width: 220px;
+}
+
+.bar {
+  position: relative;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.bar .fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transition: transform 120ms linear;
+}
+
+.bar.hp .fill {
+  background: linear-gradient(#ef4444, #b91c1c);
+}
+
+.bar.mana .fill {
+  background: linear-gradient(#3b82f6, #1d4ed8);
+}
+
+.bar .label {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.weapons {
+  display: flex;
+  gap: 6px;
+}
+
+.weapon-slot {
+  position: relative;
+  width: 76px;
+  padding: 6px 6px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.weapon-slot.active {
+  border-color: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.45);
+}
+
+.weapon-slot.empty .cost {
+  color: var(--danger);
+}
+
+.weapon-slot .cooldown {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.14);
+  transform-origin: bottom center;
+  transform: scaleY(0);
+}
+
+.weapon-slot .key {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.weapon-slot .name {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.weapon-slot .damage {
+  color: var(--text);
+}
+
+.weapon-slot .cost {
+  color: var(--text-dim);
+}
+
+#toasts {
+  position: fixed;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  animation: toast-in 150ms ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+#controls {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  max-width: 280px;
   color: var(--text-dim);
 }
 

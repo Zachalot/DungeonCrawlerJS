@@ -6,6 +6,7 @@ export const Purpose = Object.freeze({
   VARIANT: 2,
   DUNGEON_X: 3,
   DUNGEON_Y: 4,
+  SPAWN: 5,
 });
 
 /** Returns a PRNG yielding floats in [0, 1). */
