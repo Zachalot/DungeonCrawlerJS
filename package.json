@@ -1,0 +1,11 @@
+{
+  "name": "dungeon-crawler-js",
+  "version": "0.1.0",
+  "description": "Top-down 2D dungeon crawler RPG POC in vanilla JS, HTML, and CSS.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve -l 8080 .",
+    "test": "node --test"
+  }
+}

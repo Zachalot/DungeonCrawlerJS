@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dungeon Crawler</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div id="debug" class="panel"></div>
+      <button id="new-world" class="btn" type="button">New world</button>
+    </div>
+
+    <div id="controls" class="panel">WASD / Arrows: move &middot; Mouse: aim</div>
+
+    <div id="file-warning" class="panel warning" hidden>
+      This game must be served over HTTP. Browsers block ES modules on <code>file://</code>.<br />
+      Run <code>npm start</code> in the project folder, then open <code>http://localhost:8080</code>.
+    </div>
+    <script>
+      if (location.protocol === "file:") document.getElementById("file-warning").hidden = false;
+    </script>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

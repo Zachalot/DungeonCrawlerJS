@@ -1,0 +1,108 @@
+:root {
+  --panel-bg: rgba(15, 18, 24, 0.78);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: #e5e7eb;
+  --text-dim: #9ca3af;
+  --accent: #3b82f6;
+  --warning: #f59e0b;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0d10;
+  color: var(--text);
+  font-family: var(--font);
+}
+
+#game {
+  display: block;
+  cursor: crosshair;
+}
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  backdrop-filter: blur(2px);
+}
+
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+#hud > * {
+  pointer-events: auto;
+}
+
+#debug {
+  min-width: 180px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hud-row span:first-child {
+  color: var(--text-dim);
+}
+
+.btn {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+#controls {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  color: var(--text-dim);
+}
+
+.warning {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 480px;
+  font-size: 14px;
+  line-height: 1.5;
+  border-color: var(--warning);
+}
+
+.warning[hidden] {
+  display: none;
+}
+
+code {
+  color: var(--warning);
+}
