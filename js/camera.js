@@ -1,6 +1,4 @@
-import { TILE_SIZE, WORLD_SIZE } from "./config.js";
-
-/** Viewport into the world; (x, y) is the top-left corner in world px. */
+/** Viewport into the current area; (x, y) is the top-left corner in world px. */
 export class Camera {
   constructor() {
     this.x = 0;
@@ -14,11 +12,10 @@ export class Camera {
     this.height = height;
   }
 
-  /** Centers on a point, clamped so the view never leaves the world. */
-  follow(targetX, targetY) {
-    const worldPx = WORLD_SIZE * TILE_SIZE;
-    this.x = Math.round(clamp(targetX - this.width / 2, 0, Math.max(0, worldPx - this.width)));
-    this.y = Math.round(clamp(targetY - this.height / 2, 0, Math.max(0, worldPx - this.height)));
+  /** Centers on a point, clamped so the view never leaves the area. Small areas are centered. */
+  follow(targetX, targetY, area) {
+    this.x = Math.round(clampAxis(targetX - this.width / 2, this.width, area.widthPx));
+    this.y = Math.round(clampAxis(targetY - this.height / 2, this.height, area.heightPx));
   }
 
   screenToWorld(sx, sy) {
@@ -26,6 +23,7 @@ export class Camera {
   }
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+function clampAxis(value, viewSize, areaSize) {
+  if (areaSize <= viewSize) return (areaSize - viewSize) / 2;
+  return Math.min(areaSize - viewSize, Math.max(0, value));
 }

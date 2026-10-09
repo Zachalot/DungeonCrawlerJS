@@ -42,10 +42,22 @@ const COLORS = {
   chestTrim: "#3f2a14",
   chestLock: "#fde047",
   chestInside: "#1c1208",
+  treasure: "#b45309",
+  labelDim: "#9ca3af",
+  lootedOverlay: "rgba(17, 24, 39, 0.55)",
+  dungeonFloor: ["#3a3631", "#36322d", "#3e3a34"],
+  dungeonCrack: "#2a2723",
+  dungeonWall: "#1f1d1b",
+  dungeonWallTop: "#4a4540",
+  dungeonMortar: "#151413",
+  portalOuter: "#4c1d95",
+  portalMid: "#7c3aed",
+  portalCore: "#ddd6fe",
 };
 
 /** Draws every tile intersecting the camera view. */
-export function drawWorld(ctx, world, camera) {
+/** Draws every tile of the current area (overworld or dungeon) intersecting the camera view. */
+export function drawWorld(ctx, area, camera) {
   const startX = Math.floor(camera.x / T);
   const startY = Math.floor(camera.y / T);
   const endX = Math.floor((camera.x + camera.width) / T);
@@ -53,14 +65,18 @@ export function drawWorld(ctx, world, camera) {
 
   for (let ty = startY; ty <= endY; ty++) {
     for (let tx = startX; tx <= endX; tx++) {
-      const { tile, variant } = world.getTileInfo(tx, ty);
+      const { tile, variant } = area.getTileInfo(tx, ty);
       drawTile(ctx, tile, variant, tx * T - camera.x, ty * T - camera.y);
     }
   }
 }
 
-/** Draws "Dungeon · Lv N" labels for entrances in chunks near the view, plus the village name. */
-export function drawLabels(ctx, world, camera) {
+/**
+ * Overworld labels: "Dungeon · Lv N" over entrances near the view (greyed with "Looted"
+ * once cleared), plus the village name. Nothing in dungeons.
+ */
+export function drawLabels(ctx, game, camera) {
+  if (game.inDungeon) return;
   ctx.font = "bold 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
@@ -71,21 +87,37 @@ export function drawLabels(ctx, world, camera) {
   const lastChunkY = Math.floor((camera.y + camera.height) / T / CHUNK_SIZE);
   for (let cy = firstChunkY; cy <= lastChunkY; cy++) {
     for (let cx = firstChunkX; cx <= lastChunkX; cx++) {
-      for (const d of world.getChunk(cx, cy).dungeons) {
-        drawLabel(ctx, `Dungeon · Lv ${d.level}`, (d.tx + 0.5) * T - camera.x, d.ty * T - camera.y - 4);
+      for (const d of game.world.getChunk(cx, cy).dungeons) {
+        const x = d.tx * T - camera.x;
+        const y = d.ty * T - camera.y;
+        const cleared = game.dungeonStatus(d.id).cleared;
+        if (cleared) {
+          ctx.fillStyle = COLORS.lootedOverlay;
+          ctx.fillRect(x, y, T, T);
+        }
+        drawLabel(ctx, `Dungeon · Lv ${d.level}${cleared ? " · Looted" : ""}`, x + T / 2, y - 4, cleared ? COLORS.labelDim : COLORS.label);
       }
     }
   }
   drawLabel(ctx, "Village (safe zone)", VILLAGE_CENTER_TILE * T - camera.x, VILLAGE_ORIGIN * T - camera.y - 6);
 }
 
-/** Draws the player and zombies, sorted by y so lower sprites overlap higher ones. */
+/** Draws the player, zombies, NPCs and chests, sorted by y so lower sprites overlap higher ones. */
 export function drawEntities(ctx, game, alpha, camera) {
   const drawables = [
     { y: game.player.y, draw: () => drawPlayer(ctx, game.player, alpha, camera) },
     ...game.zombies.map((z) => ({ y: z.y, draw: () => drawZombie(ctx, z, alpha, camera) })),
-    ...VILLAGE_NPCS.map((npc) => ({ y: (npc.ty + 0.5) * T, draw: () => drawNpc(ctx, npc, camera) })),
   ];
+  if (game.inDungeon) {
+    const { chest } = game.area;
+    const opened = game.dungeonStatus(game.area.id).chest !== null;
+    drawables.push({
+      y: (chest.ty + 0.5) * T,
+      draw: () => drawChest(ctx, (chest.tx + 0.5) * T - camera.x, (chest.ty + 0.5) * T - camera.y, COLORS.treasure, opened),
+    });
+  } else {
+    drawables.push(...VILLAGE_NPCS.map((npc) => ({ y: (npc.ty + 0.5) * T, draw: () => drawNpc(ctx, npc, camera) })));
+  }
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 }
@@ -241,21 +273,34 @@ function drawZombie(ctx, zombie, alpha, camera) {
   }
 }
 
-/** NPC names, plus an "[F]" prompt over the one in interact range. */
-export function drawNpcLabels(ctx, game, camera) {
-  const nearby = game.nearbyNpc();
+/** Names over NPCs and dungeon fixtures, plus an "[F] …" prompt over the one in interact range. */
+export function drawInteractions(ctx, game, camera) {
+  const nearby = game.nearbyInteractable();
   ctx.font = "bold 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
-  for (const npc of VILLAGE_NPCS) {
-    const x = (npc.tx + 0.5) * T - camera.x;
-    const y = npc.ty * T - camera.y - 2;
-    drawLabel(ctx, npc.name, x, y);
-    if (npc === nearby) {
+  for (const it of game.interactables()) {
+    const x = (it.tx + 0.5) * T - camera.x;
+    const y = it.ty * T - camera.y - (it.kind === "entrance" ? 18 : 2);
+    if (it.kind !== "entrance") drawLabel(ctx, it.name, x, y);
+    if (nearby && it.kind === nearby.kind && it.tx === nearby.tx && it.ty === nearby.ty) {
       ctx.fillStyle = COLORS.prompt;
-      ctx.fillText(npc.kind === "stash" ? "[F] Open" : "[F] Talk", x, y - 14);
+      ctx.fillText(it.prompt, x, y - 14);
     }
   }
+}
+
+/** Torchlight: darkens a dungeon except for a soft circle around the player. */
+export function drawDarkness(ctx, game, alpha, camera) {
+  if (!game.inDungeon) return;
+  const pos = game.player.renderPosition(alpha);
+  const sx = pos.x - camera.x;
+  const sy = pos.y - camera.y;
+  const gradient = ctx.createRadialGradient(sx, sy, 3 * T, sx, sy, 11 * T);
+  gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0.82)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, camera.width, camera.height);
 }
 
 function drawNpc(ctx, npc, camera) {
@@ -340,6 +385,25 @@ function drawTile(ctx, tile, variant, x, y) {
       fill(ctx, pick(COLORS.grass, variant), x, y);
       drawEntrance(ctx, x, y);
       break;
+    case Tile.DUNGEON_FLOOR:
+      fill(ctx, pick(COLORS.dungeonFloor, variant), x, y);
+      if (variant % 7 === 0) {
+        ctx.fillStyle = COLORS.dungeonCrack;
+        ctx.fillRect(x + (variant % 20) + 4, y + ((variant >> 3) % 20) + 4, 6, 2);
+      }
+      break;
+    case Tile.DUNGEON_WALL:
+      fill(ctx, COLORS.dungeonWall, x, y);
+      ctx.fillStyle = COLORS.dungeonWallTop;
+      ctx.fillRect(x, y, T, 5);
+      ctx.fillStyle = COLORS.dungeonMortar;
+      ctx.fillRect(x, y + 17, T, 2);
+      ctx.fillRect(x + ((variant & 1) ? 10 : 20), y + 5, 2, 12);
+      break;
+    case Tile.EXIT_PORTAL:
+      fill(ctx, pick(COLORS.dungeonFloor, variant), x, y);
+      drawPortal(ctx, x, y);
+      break;
     default:
       fill(ctx, pick(COLORS.grass, variant), x, y);
   }
@@ -401,9 +465,20 @@ function drawEntrance(ctx, x, y) {
   for (let i = 0; i < 3; i++) ctx.fillRect(x + 9 + i * 2, y + 13 + i * 5, T - 18 - i * 4, 2);
 }
 
-function drawLabel(ctx, text, x, y) {
+function drawPortal(ctx, x, y) {
+  const cx = x + T / 2;
+  const cy = y + T / 2;
+  for (const [r, color] of [[14, COLORS.portalOuter], [10, COLORS.portalMid], [5, COLORS.portalCore]]) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, r, r * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawLabel(ctx, text, x, y, color = COLORS.label) {
   ctx.fillStyle = COLORS.labelShadow;
   ctx.fillText(text, x + 1, y + 1);
-  ctx.fillStyle = COLORS.label;
+  ctx.fillStyle = color;
   ctx.fillText(text, x, y);
 }

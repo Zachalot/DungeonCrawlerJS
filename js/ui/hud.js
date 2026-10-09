@@ -74,7 +74,7 @@ export class Hud {
       row("Seed", world.seed),
       row("Tile", `${tx}, ${ty}`),
       row("Chunk", `${Math.floor(tx / CHUNK_SIZE)}, ${Math.floor(ty / CHUNK_SIZE)}`),
-      row("Zone", game.isPlayerSafe() ? "Village (safe)" : "Wilderness"),
+      row("Zone", game.inDungeon ? `Dungeon Lv ${game.area.level}` : game.isPlayerSafe() ? "Village (safe)" : "Wilderness"),
       row("Zombies", game.zombies.length),
       row("FPS", fps),
     ].join("");

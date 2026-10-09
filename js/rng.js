@@ -7,7 +7,13 @@ export const Purpose = Object.freeze({
   DUNGEON_X: 3,
   DUNGEON_Y: 4,
   SPAWN: 5,
+  DUNGEON_LAYOUT: 6,
 });
+
+/** Integer in [min, max] inclusive from a [0, 1) PRNG. */
+export function randomInt(random, min, max) {
+  return min + Math.floor(random() * (max - min + 1));
+}
 
 /** Returns a PRNG yielding floats in [0, 1). */
 export function mulberry32(seed) {

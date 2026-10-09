@@ -3,9 +3,10 @@ import { MAX_FRAME_TIME, UPDATE_HZ } from "./config.js";
 import { WEAPONS, WEAPON_ORDER } from "./data/weapons.js";
 import { Game } from "./game.js";
 import { Input } from "./input.js";
-import { drawEffects, drawEntities, drawLabels, drawNpcLabels, drawProjectiles, drawWorld } from "./render.js";
+import { drawDarkness, drawEffects, drawEntities, drawInteractions, drawLabels, drawProjectiles, drawWorld } from "./render.js";
 import { randomSeed } from "./rng.js";
 import { CharacterSheet } from "./ui/character.js";
+import { ChestPanel } from "./ui/chest.js";
 import { Hud } from "./ui/hud.js";
 import { InventoryPanel } from "./ui/inventory.js";
 import { Tooltip } from "./ui/items.js";
@@ -49,6 +50,7 @@ const panels = {
   potionVendor: new VendorDialog(modal, getGame, callbacks, "potionVendor"),
   generalVendor: new VendorDialog(modal, getGame, callbacks, "generalVendor"),
   stash: new StashPanel(modal, getGame, callbacks),
+  chest: new ChestPanel(modal, getGame, callbacks),
 };
 const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory" };
 let activePanel = null;
@@ -87,12 +89,13 @@ function frame(now) {
   syncCamera(alpha);
 
   ctx.clearRect(0, 0, camera.width, camera.height);
-  drawWorld(ctx, game.world, camera);
+  drawWorld(ctx, game.area, camera);
   drawProjectiles(ctx, game.projectiles, alpha, camera);
   drawEntities(ctx, game, alpha, camera);
   drawEffects(ctx, game.effects, camera);
-  drawLabels(ctx, game.world, camera);
-  drawNpcLabels(ctx, game, camera);
+  drawDarkness(ctx, game, alpha, camera);
+  drawLabels(ctx, game, camera);
+  drawInteractions(ctx, game, camera);
   hud.update(frameTime, game);
 
   requestAnimationFrame(frame);
@@ -111,8 +114,8 @@ function handlePresses(pressed) {
   }
   if (activePanel) return;
   if (pressed.has("KeyF")) {
-    const npc = game.nearbyNpc();
-    if (npc && panels[npc.id]) openPanel(npc.id);
+    const panel = game.interact();
+    if (panel && panels[panel]) openPanel(panel);
   }
   if (pressed.has("KeyQ")) game.drinkPotion("hp");
   if (pressed.has("KeyE")) game.drinkPotion("mana");
@@ -141,7 +144,7 @@ function closePanel() {
 // Follows the player and shares the view with the game so zombies never spawn on screen.
 function syncCamera(alpha) {
   const target = game.player.renderPosition(alpha);
-  camera.follow(target.x, target.y);
+  camera.follow(target.x, target.y, game.area);
   game.view = { x: camera.x, y: camera.y, width: camera.width, height: camera.height };
 }
 

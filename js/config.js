@@ -15,6 +15,15 @@ export const DUNGEON_CELL_MARGIN = 5; // min distance from cell edge
 export const DUNGEON_MIN_VILLAGE_DISTANCE = 15; // Chebyshev tiles from village center
 export const DUNGEON_LEVEL_DISTANCE = 50; // tiles per dungeon level step
 
+// Dungeon interiors.
+export const DUNGEON_SIZE = 60; // tiles per side
+export const DUNGEON_ROOM_COUNT = [5, 8];
+export const DUNGEON_ROOM_SIZE = [6, 11]; // tiles per side, inclusive
+export const DUNGEON_ROOM_GAP = 2; // min wall tiles between rooms
+export const DUNGEON_CORRIDOR_WIDTH = 2;
+export const DUNGEON_ZOMBIES_PER_ROOM = [3, 6];
+export const DUNGEON_PACK_SIZE = [6, 8]; // the room just before the chest
+
 export const ROCK_DENSITY = 0.03;
 export const TREE_DENSITY = 0.05;
 export const ZOMBIE_SPAWN_DENSITY = 0.004; // per overworld grass tile
