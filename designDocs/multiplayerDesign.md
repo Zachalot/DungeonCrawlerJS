@@ -477,6 +477,40 @@ Once ranking exists, leaderboard-relevant values are only written from server-si
 - Connection limits per IP and per account, and per-IP rate limits on signups and logins.
 - The dev panel (`?dev`) and `window.game` exist only in `LocalGame`.
 
+### 10.6 Known issue: save codes and cloud saves can be forged today
+**Found 2026-10-09 during M8 playtesting. Acceptable for single player; must be fixed before leaderboards, trading, or multiplayer.**
+
+**The problem.** A save code (pause menu → Export save) is not a signed token. It's the save JSON, base64-encoded (`exportSave` in `js/save.js`), and base64 is an encoding anyone can reverse. Anyone can decode it, edit it, re-encode it, and import it:
+
+```js
+const save = JSON.parse(atob(code));
+save.player.stats.str = 10000;          // or level, gold, items…
+const forged = btoa(JSON.stringify(save)); // imports fine: validateSave only checks shapes and types
+```
+
+Once imported while signed in, the next autosave uploads the forged save to the player's account. Three other routes reach the same result without import:
+- editing `window.game` in the browser console
+- the dev panel (`?dev`)
+- calling the `save_slot` database function directly with any JSON, using the player's own session
+
+Row-level security only guarantees a player writes **their own** row. It doesn't check what the save **contains**.
+
+**What is not at risk.** Players can't edit *other* players' saves or sign in as them. The Supabase session token is a real JWT (`header.payload.signature`), and changing its payload breaks the signature, which Supabase verifies with a key that never leaves its servers.
+
+**Why "just sign the save code in the browser" doesn't work.** Signing (e.g. an HMAC over the JSON) only proves integrity if the signing key is secret. Any key used by browser code ships in the game's JavaScript, where a cheater can read it and sign their own forged saves. Obfuscating the key only slows them down. **Signing has to happen on a server that holds the key.**
+
+**The fix, in order of strength:**
+
+| Fix | What it stops | Limit |
+|---|---|---|
+| **Sanity checks in `validateSave`** (e.g. total stats ≤ `20 + 3 × (level − 1)`, XP consistent with level, item counts within stack limits) | Careless edits | A cheater who also edits `level` passes. A speed bump only. |
+| **Server-signed save codes**: a server or Supabase Edge Function issues `payload + signature` (HMAC with a server-only secret) on export, and verifies the signature on import, server-side, before accepting the save | Forged *codes*: an edited code fails verification | Only protects the code. Doesn't stop a client that writes its own cloud save, so it must come with the next row. |
+| **Server-owned writes (the real fix)**: the browser loses write access to online characters (RLS flip, §9.1). Only the authoritative server, which ran the simulation and decided every outcome, writes character data. | All of the above: the client never supplies results, so there's nothing to forge | Requires the authoritative server (§2, MP6) |
+
+With server-owned writes, save codes stop being trusted input for online characters at all: export/import is disabled for them (§9.2) and kept only for offline single-player saves, where cheating only affects the cheater. Leaderboards before full multiplayer can sit in between: a database function that accepts a score only after recomputing or bounding it server-side (§10.4).
+
+**Tracked in:** MP6 (server-owned persistence). Leaderboards must not ship on client-written saves without at least server-side score validation.
+
 ---
 
 ## 11. PvP and Faction Design Problems
@@ -542,7 +576,7 @@ Numbered MP1–MP8 so they don't collide with the other docs. Each should leave 
 | **MP3** | Two players in view | Inputs and snapshots work; clock sync and interpolation; remote players render with name tags; AOI by chunk with enter/update/leave; two browsers see each other move smoothly |
 | **MP4** | Prediction + latency tooling | Own movement is predicted and reconciled; a network conditioner (artificial delay, jitter, loss) is built into the client; the game plays acceptably at 150 ms RTT and 2% loss |
 | **MP5** | Combat sync | Server-owned attacks, projectiles, damage, and kills; event-driven animations; lag compensation for melee; zombies target multiple players; two players can kill zombies together |
-| **MP6** | Server-owned persistence + instances | RLS flipped (client can't write online characters); write-behind with immediate transactional writes; session lease and revision fencing; dungeon party instances; export/import disabled online |
+| **MP6** | Server-owned persistence + instances | The forgeable-save issue in §10.6 is closed; RLS flipped (client can't write online characters); write-behind with immediate transactional writes; session lease and revision fencing; dungeon party instances; export/import disabled online |
 | **MP7** | PvP, factions, social | Faction rules and safe zones enforced server-side; chat; kill credit; reporting and admin tools; rate limiting and anti-abuse; a decision recorded for grave looting |
 | **MP8** | Scale and operations | A bot-based load test reports tick time, bandwidth, and capacity per process; metrics and logs in place; graceful deploys with protocol versioning; Stage B channel assignment if load demands it; backups and restore tested |
 

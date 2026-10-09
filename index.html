@@ -3,6 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Scripts may come only from this site, the pinned Supabase library on jsDelivr, and the inline
+      file:// check below (by hash: edit that script and the hash must be recomputed). Network calls
+      may go only to the Supabase project.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-ufr8zhP5+l+w/phLbqsI1YGplnO0IbYnO33cNAgvBa4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://izutqcgxepfpqeffuetn.supabase.co wss://izutqcgxepfpqeffuetn.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
     <title>Dungeon Crawler</title>
     <link rel="stylesheet" href="css/style.css" />
   </head>

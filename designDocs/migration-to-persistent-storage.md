@@ -1,6 +1,14 @@
 # Migration to Persistent Storage — Design Doc
 
-> Status: Draft v0.3 · Backend: Supabase (Postgres + Auth) · Client: browser, vanilla JS, no build step · Supersedes: the "Databases or servers" non-goal in the main design doc (§1.2)
+> Status: **Implemented in M8** (v0.4) · Backend: Supabase (Postgres + Auth) · Client: browser, vanilla JS, no build step · Supersedes: the "Databases or servers" non-goal in the main design doc (§1.2)
+
+**Changes in v0.4 (implementation, branch `M8SupabaseMigration`):** the code for M2–M6 is built; the dashboard steps in M1 are yours to do (see the README's *Backend (Supabase)* section, which also documents the live schema). Where the build differs from the plan below:
+- **Guest saves keep their original keys** (`dungeonCrawler.slotN`) instead of moving to a `guest` namespace, so existing local saves need no migration. Account slots use `dungeonCrawler.<user id>.slotN`. The "legacy import" (M5) is a title-screen section that **copies** guest saves into empty account slots, leaving the guest copies in place.
+- **No separate `client.js`:** `js/cloud/auth.js` loads `supabase-js` with a dynamic `import()` and creates the client. If the CDN fails, the game still runs, guest-only, with a note on the title screen.
+- **Conflict prompt:** each copy has **Keep this one** and **Copy save code** buttons, rather than exporting the losing copy automatically.
+- **Migrations are re-runnable** (`if not exists`, `drop policy if exists`, `create or replace`) and set explicit grants: `profiles` lets the browser update only the `username` column. `supabase/verify.sql` checks the result.
+- **A Content Security Policy** (`<meta>` in `index.html`) limits scripts to this site and the pinned jsDelivr library, and network calls to the Supabase project (§3.3.7).
+- **Save code:** `SAVE_VERSION` is 3 (fog of war, from M7). Unchanged by this work.
 
 **Changes in v0.3:** added §3.3 (how Supabase Auth works: storage, password hashing, sign-up/sign-in/reset flows, tokens, session persistence, browser security) and §3.6 (what custom SMTP is, and the Gmail-app-password vs own-domain options).
 
@@ -10,7 +18,7 @@
 
 **Milestone numbering:** M1–M6 here are independent of M1–M7 in `dungeon-crawler-design-doc.md`.
 
-**Save format:** this plan does **not** change the save shape or bump `SAVE_VERSION`. The save blob is stored as-is in a `jsonb` column, and the existing `migrate()` / `validateSave()` keep running on the client. (The main design doc §13.1 describes v3, but `js/save.js` on this branch is v2. Whichever version is current when you start M4 is the one that gets stored.)
+**Save format:** this plan does **not** change the save shape or bump `SAVE_VERSION`. The save blob is stored as-is in a `jsonb` column, and the existing `migrate()` / `validateSave()` keep running on the client.
 
 ---
 
@@ -105,6 +113,8 @@ Player clicks the link
 ```
 With Confirm email off (setup only), `signUp` returns a session immediately and skips the email.
 
+**One account per email.** Supabase enforces this itself (a unique index on `auth.users.email`), so a second account can't be created. How it *answers* differs: with Confirm email off it returns the error `User already registered`; with Confirm email on it returns a fake user with an empty `identities` list and creates nothing, so sign-up doesn't reveal which emails are registered. The game treats both as "An account with that email already exists". The cost is that someone could learn whether an email has an account by trying to sign up with it. For a game that's an acceptable trade for not telling players "check your email" for an account that was never made. Gmail `+tag` and dot variants (`a.b@gmail.com` vs `ab@gmail.com`) count as different emails; blocking those would need extra normalization.
+
 #### 3.3.4 Sign-in and tokens
 ```
 Game: signInWithPassword({ email, password })
@@ -136,9 +146,19 @@ Player clicks the link
 - The UI says "If an account exists for that email, we've sent a link," to match the server's non-revealing behavior.
 
 #### 3.3.7 Browser security notes
-- **Anything stored in `localStorage` is readable by any script on the same origin.** The session token is therefore only as safe as the code running on the page. Never render player-controlled text with `innerHTML` unescaped. (`title.js` renders slot summaries through `innerHTML` today. Escape anything that comes from the network or another player before usernames and leaderboards appear.)
-- **GitHub Pages shares one origin per account.** Every project site under `zachalot.github.io` (this game and any other repo you publish to Pages) shares `https://zachalot.github.io`, and therefore shares `localStorage`. Any of those sites could read this game's session. Either keep untrusted code off your Pages sites, or move the game to a custom domain (§3.6, which also solves email).
-- The publishable key in `js/cloud/config.js` is public by design. RLS is what protects data. The `service_role`/secret key must never appear in the repo or the browser.
+The session token sits in `localStorage`, which any script running on the same **origin** (protocol + host + port; the path doesn't count) can read. There are two separate ways a script could get there, and they have different fixes.
+
+**Risk 1: script injected into the game's own page (XSS).** The realistic route is *stored XSS*: an attacker saves text (a username, a chat message, a village name) that another player's game later renders with `innerHTML`, so it runs as code in the victim's page and can send their token away. SQL injection isn't the route, because `supabase-js` sends values as parameters. Fixes, all in our code:
+- Render player-supplied text with `textContent`, or escape it before `innerHTML`. (`title.js` builds slot cards with `innerHTML` today. Escape anything from the network or another player before usernames and leaderboards appear.)
+- Validate on the server as well. The `username_format` check in §5.1 already makes usernames safe to display.
+- Add a Content Security Policy via `<meta http-equiv="Content-Security-Policy">` in `index.html` (Pages can't set headers), allowing scripts only from our own origin and the pinned CDN.
+- Pin the `supabase-js` version, or vendor it into `js/vendor/`, so a CDN compromise can't swap the code.
+
+**Risk 2: other sites sharing the game's origin.** Every Pages site under one account (`https://zachalot.github.io/DungeonCrawlerJS/`, `https://zachalot.github.io/AnyOtherRepo/`, and a `zachalot.github.io` user site) is the **same origin**, so they share one `localStorage`. Nothing has to be injected: code on any of those other sites (a third-party script, its own XSS bug, a contributor's change) can read this game's session. A **custom domain** gives the game its own origin and walls it off. It does nothing against Risk 1. If this is your only Pages site and it loads no third-party scripts, Risk 2 is small for now.
+
+**What a stolen token gets:** the attacker can act as that player (read and overwrite *that player's* saves; RLS still blocks everyone else's) until the session is revoked. The password isn't exposed, since only tokens are stored. Signing out revokes the refresh token, and an already-copied access token keeps working until it expires (about an hour). Consider Supabase's secure-password-change setting, which requires a recent sign-in before a password change (verify it exists in your dashboard).
+
+The publishable key in `js/cloud/config.js` is public by design. RLS is what protects data. The `service_role`/secret key must never appear in the repo or the browser.
 
 ### 3.6 Email delivery: what "custom SMTP" means
 **SMTP** is the protocol mail servers use to hand messages to each other. When Supabase Auth needs to send a confirmation or reset email, it connects to an SMTP server and hands the message over. "Custom SMTP" means giving Supabase the address and login of an email-sending service you choose, instead of Supabase's built-in one. It's a form in the dashboard (*Authentication → SMTP Settings*: host, port, username, password, sender name and address). **There's no code on our side.** Supabase does the sending.

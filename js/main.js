@@ -1,4 +1,7 @@
 import { Camera } from "./camera.js";
+import { Auth } from "./cloud/auth.js";
+import { CloudSaves } from "./cloud/cloudSaves.js";
+import { SyncStatus, SyncedSaveStore } from "./cloud/sync.js";
 import { AUTOSAVE_INTERVAL, MAX_FRAME_TIME, UPDATE_HZ } from "./config.js";
 import { WEAPONS, WEAPON_ORDER } from "./data/weapons.js";
 import { Game } from "./game.js";
@@ -32,10 +35,18 @@ import { TrainerDialog } from "./ui/trainer.js";
 import { VendorDialog } from "./ui/vendor.js";
 
 const STEP = 1 / UPDATE_HZ;
+const IMMEDIATE_SYNC = new Set(["death", "chest", "grave"]); // autosaves pushed to the cloud without the debounce
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const store = new SaveStore();
+
+/** Saves made without an account (the original localStorage slots). */
+const guestStore = new SaveStore();
+/** The signed-in account (null if accounts are unavailable) and the slots in use: guest, or the account's synced slots. */
+let auth = null;
+let store = guestStore;
+let authChanges = Promise.resolve(); // sign-in/out handling, one at a time
+let warnedOffline = false;
 
 /** The running game and the slot it saves to; both null on the title screen. */
 let game = null;
@@ -72,7 +83,14 @@ const panels = {
   generalVendor: new VendorDialog(modal, getGame, callbacks, "generalVendor"),
   stash: new StashPanel(modal, getGame, callbacks),
   chest: new ChestPanel(modal, getGame, callbacks),
-  pause: new PauseMenu(modal, getGame, { ...callbacks, onSave: () => saveNow("manual"), onQuit: quitToTitle, slot: () => slot }),
+  pause: new PauseMenu(modal, getGame, {
+    ...callbacks,
+    onSave: () => saveNow("manual", { immediate: true }),
+    onQuit: quitToTitle,
+    onSignOut: signOut,
+    slot: () => slot,
+    account: () => (auth?.user ? { name: auth.username ?? auth.email, status: store.status } : null),
+  }),
   map: new MapPanel(modal, getGame, callbacks),
 };
 const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory", KeyM: "map" };
@@ -83,32 +101,105 @@ let activePanel = null;
 const wheel = new QuickWheel(document.getElementById("quick-wheel"), getGame);
 let wheelAim = { x: 0, y: 0 }; // aim frozen while the wheel is open
 
-const title = new TitleScreen(document.getElementById("title"), store, {
+const title = new TitleScreen(document.getElementById("title"), {
+  getStore: () => store,
+  getAuth: () => auth,
+  guestStore,
   defaultSeed: seedFromUrl(),
   onContinue: (s) => startGame(s, restoreGame(store.load(s))),
   onNewGame: (s, seed) => {
     const fresh = new Game(seed ?? randomSeed());
-    store.save(s, fresh);
+    store.save(s, fresh, { immediate: true });
     startGame(s, fresh);
   },
   onImport: (s, data) => {
-    store.save(s, data);
+    store.save(s, data, { immediate: true });
     startGame(s, restoreGame(data));
+  },
+  onSignOut: async () => {
+    await store.flush?.();
+    await auth.signOut();
   },
 });
 
 document.getElementById("menu-button").addEventListener("click", () => openPanel("pause"));
 window.addEventListener("resize", resize);
-window.addEventListener("beforeunload", () => saveNow("unload"));
+window.addEventListener("beforeunload", () => saveNow("unload", { immediate: true }));
+window.addEventListener("online", () => store.flush?.());
 setInterval(() => {
   if (game && !document.hidden) saveNow("interval");
 }, AUTOSAVE_INTERVAL * 1000);
 resize();
-showTitle();
+title.showLoading();
+initAccounts();
 
 let lastTime = performance.now();
 let accumulator = 0;
 requestAnimationFrame(frame);
+
+/** Restores the session (if any) and shows the title. Without accounts the game is guest-only. */
+async function initAccounts() {
+  try {
+    auth = await Auth.create();
+  } catch (error) {
+    console.warn("Accounts unavailable", error);
+    title.cloudNote = "Accounts and cloud saves are unavailable right now (couldn't load the sign-in service).";
+  }
+  if (auth) {
+    await useAccountStore();
+    auth.onChange((event) => {
+      authChanges = authChanges.then(() => onAuthChange(event)); // one switch at a time
+    });
+  }
+  if (!game) showTitle();
+}
+
+async function onAuthChange(event) {
+  if (event === "PASSWORD_RECOVERY") {
+    if (!game) title.show();
+    return;
+  }
+  if (auth.userId === store.owner) return; // token refresh, profile update, etc.
+  if (game) {
+    saveNow("quit", { immediate: true });
+    await store.flush?.();
+    closePanel();
+  }
+  await useAccountStore();
+  showTitle();
+}
+
+/** Points `store` at the signed-in account's synced slots, or the guest slots when signed out. */
+async function useAccountStore() {
+  warnedOffline = false;
+  if (!auth.user) {
+    store = guestStore;
+    return;
+  }
+  await auth.loadProfile();
+  store = new SyncedSaveStore(new SaveStore(localStorage, { owner: auth.userId }), new CloudSaves(auth.client), {
+    onStatus: onSyncStatus,
+  });
+}
+
+function onSyncStatus(status) {
+  if (!game) return;
+  if (status === SyncStatus.offline && !warnedOffline) {
+    warnedOffline = true;
+    toasts.show("Can't reach the cloud. Your progress is saved on this device and will sync when the connection is back.");
+  } else if (status === SyncStatus.conflict) {
+    toasts.show("This slot was also saved on another device. Your progress is kept here; choose which copy to keep on the title screen.");
+  } else if (status === SyncStatus.synced) {
+    warnedOffline = false;
+  }
+}
+
+async function signOut() {
+  saveNow("quit", { immediate: true });
+  await store.flush?.();
+  closePanel();
+  await auth.signOut(); // onAuthChange switches to the guest slots and shows the title
+}
 
 function startGame(newSlot, newGame) {
   slot = newSlot;
@@ -130,17 +221,21 @@ function showTitle() {
 }
 
 function quitToTitle() {
-  saveNow("quit");
+  saveNow("quit", { immediate: true });
   closePanel();
-  showTitle();
+  showTitle(); // its cloud pull queues behind the push above
 }
 
-/** Writes the running game to its slot. Never throws: a failed save is reported, not fatal. */
-function saveNow(reason) {
+/**
+ * Writes the running game to its slot. Never throws: a failed save is reported, not fatal.
+ * Signed in, the save lands on this device now and in the cloud shortly after (or right away if `immediate`).
+ */
+function saveNow(reason, { immediate = false } = {}) {
   if (!game) return;
   try {
-    store.save(slot, game);
-    flashSaveIndicator(reason === "manual" ? "Saved" : "Autosaved");
+    store.save(slot, game, { immediate });
+    const offline = store.status === SyncStatus.offline;
+    flashSaveIndicator(`${reason === "manual" ? "Saved" : "Autosaved"}${offline ? " on this device" : ""}`);
   } catch (error) {
     console.error("Save failed", error);
     toasts.show(`Save failed: ${error.message}`);
@@ -176,12 +271,12 @@ function frame(now) {
       accumulator -= STEP;
     }
   }
-  let shouldSave = false;
+  const autosaves = [];
   for (const event of game.events.splice(0)) {
     if (event.type === "toast") toasts.show(event.text);
-    if (event.type === "autosave") shouldSave = true;
+    if (event.type === "autosave") autosaves.push(event.reason);
   }
-  if (shouldSave) saveNow("event");
+  if (autosaves.length) saveNow("event", { immediate: autosaves.some((reason) => IMMEDIATE_SYNC.has(reason)) });
 
   const alpha = accumulator / STEP;
   syncCamera(alpha);

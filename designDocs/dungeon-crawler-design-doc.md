@@ -1,6 +1,6 @@
 # Dungeon Crawler RPG — Design Doc (POC)
 
-> Status: Draft v0.2 · Platform: Browser (HTML / CSS / vanilla JS) · Persistence: `localStorage`
+> Status: Draft v0.2 · Platform: Browser (HTML / CSS / vanilla JS) · Persistence: `localStorage`, plus accounts and cloud saves from M8 (see `migration-to-persistent-storage.md`)
 
 **Changes in v0.2:** decided on grave retrieval for death, no weapon damage bonus in the POC, sword cleave/speed/knockback, Level 1 Zombies deal 2 damage, a fixed world size built so it can become endless later, and all of the "not in the original spec" items added as requirements. Items marked **[Default]** are my choice where you haven't decided. Change any of them freely.
 
@@ -18,7 +18,7 @@ A real-time, top-down 2D action RPG. The player starts in a safe village, gears 
 - Build world generation so the fixed POC world can become an endless world later (§7.2).
 
 ### 1.2 Non-goals (for now)
-Databases or servers, multiplayer, more than one enemy type, resource harvesting, dodge, weapon damage bonuses, dungeon level scaling (the data hooks exist; see §7.4), an endless world, and audio. Art is simple shapes or a free tileset (§16).
+Servers of our own (M8 added a hosted Supabase database for accounts and cloud saves), multiplayer, more than one enemy type, resource harvesting, dodge, weapon damage bonuses, dungeon level scaling (the data hooks exist; see §7.4), an endless world, and audio. Art is simple shapes or a free tileset (§16).
 
 ---
 
@@ -404,6 +404,8 @@ Starter Sword, Starter Bow, and Starter Staff (equipped), 30 arrows, 2 Minor Hea
 
 ## 13. Persistence (localStorage)
 
+> From M8, a signed-in player's slots are also synced to Supabase; this section still describes the save format and the local slots, which act as the cache. Accounts, sync, and conflicts are specified in `migration-to-persistent-storage.md`.
+
 ### 13.1 Save schema
 As implemented in `js/save.js` (v3). Each version step has a migration:
 - **v2** added the `sword` / `bow` / `staff` equipment slots; the v1 → v2 migration arms old characters with starter weapons.
@@ -541,6 +543,7 @@ js/
 | M5 | Dungeons | Entrances spawn per cell, dungeons generate, chest loot works, cleared state, level label on entrances. *Dungeons also got a torchlight vignette.* |
 | M6 | Persistence + death | Save slots, autosave triggers, migration, export/import, graves with one-grave rule. *The grave arrow was pulled forward from M7.* |
 | M7 | Maps + polish | Minimap, large map, fog of war, dev panel. *Save format v3 adds the explored map.* |
+| M8 | Accounts + cloud saves | Email/password accounts with reset, three cloud-synced slots per account, offline play, conflict handling, guest mode (see `migration-to-persistent-storage.md`) |
 
 ---
 
