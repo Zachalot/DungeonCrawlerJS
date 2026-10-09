@@ -1,15 +1,20 @@
 import { CHUNK_SIZE } from "../config.js";
 import { WEAPONS, WEAPON_ORDER } from "../data/weapons.js";
+import { xpToNext } from "../systems/leveling.js";
 import { maxHp, maxMana, weaponDamage } from "../systems/stats.js";
 
 const DEBUG_REFRESH_INTERVAL = 0.2; // s
 
-/** HP/mana bars, weapon slots, and the debug readout. */
+/** HP/mana/XP bars, level, gold, weapon slots, and the debug readout. */
 export class Hud {
-  constructor({ debug, hpBar, manaBar, weapons }) {
+  constructor({ debug, hpBar, manaBar, xpBar, level, gold, pointsHint, weapons }) {
     this.debug = debug;
     this.hpBar = hpBar;
     this.manaBar = manaBar;
+    this.xpBar = xpBar;
+    this.level = level;
+    this.gold = gold;
+    this.pointsHint = pointsHint;
     this.slots = WEAPON_ORDER.map((id, i) => createSlot(weapons, WEAPONS[id], i + 1));
     this.cache = new Map();
     this.debugElapsed = DEBUG_REFRESH_INTERVAL;
@@ -20,6 +25,11 @@ export class Hud {
     const { player } = game;
     this.updateBar(this.hpBar, player.hp, maxHp(player.stats));
     this.updateBar(this.manaBar, player.mana, maxMana(player.stats));
+    this.updateBar(this.xpBar, player.xp, xpToNext(player.level), "XP ");
+    this.setText(this.level, `Lv ${player.level}`);
+    this.setText(this.gold, `${player.gold} g`);
+    this.pointsHint.hidden = player.unspentPoints === 0;
+    this.setText(this.pointsHint, `+${player.unspentPoints} points (C)`);
 
     for (const slot of this.slots) {
       const { weapon } = slot;
@@ -35,9 +45,9 @@ export class Hud {
     this.updateDebug(frameTime, game);
   }
 
-  updateBar(bar, value, max) {
+  updateBar(bar, value, max, prefix = "") {
     bar.querySelector(".fill").style.transform = `scaleX(${max > 0 ? value / max : 0})`;
-    this.setText(bar.querySelector(".label"), `${value} / ${max}`);
+    this.setText(bar.querySelector(".label"), `${prefix}${value} / ${max}`);
   }
 
   updateDebug(frameTime, game) {

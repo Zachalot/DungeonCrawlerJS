@@ -18,14 +18,25 @@
 
     <div id="hud-bottom">
       <div class="bars panel">
+        <div class="status-row">
+          <span id="level" class="level"></span>
+          <span id="points-hint" class="points-hint" hidden></span>
+          <span id="gold" class="gold"></span>
+        </div>
         <div id="hp-bar" class="bar hp"><div class="fill"></div><span class="label"></span></div>
         <div id="mana-bar" class="bar mana"><div class="fill"></div><span class="label"></span></div>
+        <div id="xp-bar" class="bar xp"><div class="fill"></div><span class="label"></span></div>
       </div>
       <div id="weapons" class="weapons"></div>
     </div>
 
     <div id="controls" class="panel">
       WASD / Arrows: move &middot; Mouse: aim &middot; Click / Space: attack &middot; 1 / 2 / 3: sword / bow / staff
+      &middot; C: character &middot; F: talk &middot; Esc: close
+    </div>
+
+    <div id="modal-backdrop" class="modal-backdrop" hidden>
+      <div id="modal" class="modal panel" role="dialog" aria-modal="true"></div>
     </div>
 
     <div id="file-warning" class="panel warning" hidden>

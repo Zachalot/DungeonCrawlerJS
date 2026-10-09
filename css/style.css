@@ -124,6 +124,47 @@ body {
   background: linear-gradient(#3b82f6, #1d4ed8);
 }
 
+.bar.xp {
+  height: 10px;
+}
+
+.bar.xp .fill {
+  background: linear-gradient(#a3e635, #65a30d);
+}
+
+.bar.xp .label {
+  font-size: 9px;
+  line-height: 10px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-row .gold {
+  margin-left: auto;
+  color: #fbbf24;
+}
+
+.points-hint {
+  color: #a3e635;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.points-hint[hidden] {
+  display: none;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .bar .label {
   position: relative;
   display: block;
@@ -195,7 +236,7 @@ body {
 
 #toasts {
   position: fixed;
-  top: 22%;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -203,6 +244,7 @@ body {
   align-items: center;
   gap: 6px;
   pointer-events: none;
+  z-index: 20;
 }
 
 .toast {
@@ -228,6 +270,125 @@ body {
   right: 12px;
   max-width: 280px;
   color: var(--text-dim);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10;
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: rgba(15, 18, 24, 0.96);
+  padding: 16px 18px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.modal h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.modal h3 {
+  margin: 14px 0 4px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.modal p {
+  margin: 4px 0;
+}
+
+.modal table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.modal th {
+  text-align: left;
+  font-weight: 600;
+  padding: 5px 0;
+}
+
+.modal th small {
+  display: block;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.modal td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding-right: 10px;
+  white-space: nowrap;
+}
+
+.modal td.controls {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.modal .stats tr + tr {
+  border-top: 1px solid var(--panel-border);
+}
+
+.modal .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dim {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.gain {
+  color: #a3e635;
+  font-weight: 700;
+}
+
+.points {
+  color: var(--text-dim);
+}
+
+.points.has-points {
+  color: #a3e635;
+  font-weight: 700;
+}
+
+.warning-text {
+  color: var(--warning);
+}
+
+.btn.small {
+  min-width: 28px;
+  padding: 3px 8px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  border-color: var(--panel-border);
 }
 
 .warning {

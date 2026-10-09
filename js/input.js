@@ -11,11 +11,13 @@ const PREVENT_DEFAULT = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRigh
 export class Input {
   constructor(canvas) {
     this.keys = new Set();
+    this.pressed = new Set(); // keys pressed since the last consumePressed()
     this.mouse = { x: 0, y: 0, down: false }; // CSS px relative to the canvas
 
     window.addEventListener("keydown", (e) => {
       if (PREVENT_DEFAULT.has(e.code)) e.preventDefault();
       this.keys.add(e.code);
+      if (!e.repeat) this.pressed.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => {
@@ -46,6 +48,13 @@ export class Input {
       x: (this.isDown("right") ? 1 : 0) - (this.isDown("left") ? 1 : 0),
       y: (this.isDown("down") ? 1 : 0) - (this.isDown("up") ? 1 : 0),
     };
+  }
+
+  /** Returns and clears the set of keys pressed since the last call. */
+  consumePressed() {
+    const pressed = this.pressed;
+    this.pressed = new Set();
+    return pressed;
   }
 
   /** Held attack: left mouse or Space. */

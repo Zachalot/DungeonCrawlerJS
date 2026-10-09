@@ -27,6 +27,14 @@ export const STARTING_STATS = Object.freeze({ str: 5, int: 5, dex: 5, end: 5 });
 export const HP_PER_END = 10;
 export const MANA_PER_INT = 10;
 export const STARTING_ARROWS = 30;
+export const STARTING_GOLD = 25;
+export const MAX_ARROWS = 999;
+
+// Leveling.
+export const XP_PER_LEVEL = 50; // xpToNext(level) = XP_PER_LEVEL × level
+export const STAT_POINTS_PER_LEVEL = 3;
+export const RESPEC_COST_PER_LEVEL = 50; // gold
+export const INTERACT_RANGE = 1.5; // tiles
 export const PLAYER_IFRAMES = 0.5; // s of invulnerability after taking damage
 export const RESPAWN_IFRAMES = 2; // s
 export const ARMOR_K = 50; // reduction = armor / (armor + ARMOR_K)

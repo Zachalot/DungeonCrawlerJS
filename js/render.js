@@ -1,6 +1,6 @@
 import { CHUNK_SIZE, TILE_SIZE } from "./config.js";
 import { Tile } from "./world/tiles.js";
-import { VILLAGE_CENTER_TILE, VILLAGE_ORIGIN } from "./world/village.js";
+import { VILLAGE_CENTER_TILE, VILLAGE_NPCS, VILLAGE_ORIGIN } from "./world/village.js";
 
 const T = TILE_SIZE;
 
@@ -37,6 +37,8 @@ const COLORS = {
   fireballCore: "#fde68a",
   fireballOuter: "#f97316",
   swing: "rgba(255, 255, 255, 0.35)",
+  npcOutline: "#2e1065",
+  prompt: "#fbbf24",
 };
 
 /** Draws every tile intersecting the camera view. */
@@ -79,6 +81,7 @@ export function drawEntities(ctx, game, alpha, camera) {
   const drawables = [
     { y: game.player.y, draw: () => drawPlayer(ctx, game.player, alpha, camera) },
     ...game.zombies.map((z) => ({ y: z.y, draw: () => drawZombie(ctx, z, alpha, camera) })),
+    ...VILLAGE_NPCS.map((npc) => ({ y: (npc.ty + 0.5) * T, draw: () => drawNpc(ctx, npc, camera) })),
   ];
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
@@ -233,6 +236,45 @@ function drawZombie(ctx, zombie, alpha, camera) {
     ctx.fillStyle = COLORS.hpFill;
     ctx.fillRect(x, y, width * Math.max(0, zombie.hp / zombie.def.hp), 4);
   }
+}
+
+/** NPC names, plus an "[F]" prompt over the one in interact range. */
+export function drawNpcLabels(ctx, game, camera) {
+  const nearby = game.nearbyNpc();
+  ctx.font = "bold 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  for (const npc of VILLAGE_NPCS) {
+    const x = (npc.tx + 0.5) * T - camera.x;
+    const y = npc.ty * T - camera.y - 2;
+    drawLabel(ctx, npc.name, x, y);
+    if (npc === nearby) {
+      ctx.fillStyle = COLORS.prompt;
+      ctx.fillText("[F] Talk", x, y - 14);
+    }
+  }
+}
+
+function drawNpc(ctx, npc, camera) {
+  const sx = (npc.tx + 0.5) * T - camera.x;
+  const sy = (npc.ty + 0.5) * T - camera.y;
+  const r = 11;
+  drawShadow(ctx, sx, sy, r);
+  ctx.fillStyle = npc.color;
+  ctx.strokeStyle = COLORS.npcOutline;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Pointed hat.
+  ctx.fillStyle = COLORS.npcOutline;
+  ctx.beginPath();
+  ctx.moveTo(sx - 9, sy - 5);
+  ctx.lineTo(sx + 9, sy - 5);
+  ctx.lineTo(sx + 2, sy - 20);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawShadow(ctx, sx, sy, r) {

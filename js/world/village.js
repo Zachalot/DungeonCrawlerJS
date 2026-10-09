@@ -15,6 +15,11 @@ export const VILLAGE_SPAWN = Object.freeze({
   y: VILLAGE_CENTER_TILE * TILE_SIZE,
 });
 
+/** Interactable NPCs, one per inner corner of the village. Vendors and the stash join in M4. */
+export const VILLAGE_NPCS = Object.freeze([
+  { id: "trainer", name: "Respec Trainer", tx: VILLAGE_ORIGIN + 2, ty: VILLAGE_ORIGIN + 2, color: "#8b5cf6" },
+]);
+
 /** True for tiles inside the village walls, walls included. */
 export function isInVillage(tx, ty) {
   return tx >= VILLAGE_ORIGIN && tx <= VILLAGE_END && ty >= VILLAGE_ORIGIN && ty <= VILLAGE_END;
