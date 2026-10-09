@@ -77,5 +77,10 @@ export const SWING_EFFECT_TIME = 0.15; // s
 
 export const AUTOSAVE_INTERVAL = 60; // s
 
+// Maps.
+export const FOG_REVEAL_RADIUS = 8; // tiles around the player that become explored
+export const MINIMAP_SIZE = 160; // px
+export const MINIMAP_TILE_PX = 2; // px per tile, so the minimap spans 80 tiles
+
 export const UPDATE_HZ = 60;
 export const MAX_FRAME_TIME = 0.25; // s; caps catch-up after a stall
