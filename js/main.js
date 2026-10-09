@@ -7,8 +7,12 @@ import { drawEffects, drawEntities, drawLabels, drawNpcLabels, drawProjectiles, 
 import { randomSeed } from "./rng.js";
 import { CharacterSheet } from "./ui/character.js";
 import { Hud } from "./ui/hud.js";
+import { InventoryPanel } from "./ui/inventory.js";
+import { Tooltip } from "./ui/items.js";
+import { StashPanel } from "./ui/stash.js";
 import { Toasts } from "./ui/toast.js";
 import { TrainerDialog } from "./ui/trainer.js";
+import { VendorDialog } from "./ui/vendor.js";
 
 const STEP = 1 / UPDATE_HZ;
 
@@ -17,6 +21,7 @@ const ctx = canvas.getContext("2d");
 
 const game = new Game(resolveSeed());
 window.game = game; // console debugging until the M7 dev panel
+const getGame = () => game;
 const camera = new Camera();
 const input = new Input(canvas);
 const hud = new Hud({
@@ -28,16 +33,24 @@ const hud = new Hud({
   gold: document.getElementById("gold"),
   pointsHint: document.getElementById("points-hint"),
   weapons: document.getElementById("weapons"),
+  potions: document.getElementById("potions"),
 });
 const toasts = new Toasts(document.getElementById("toasts"));
+const tooltip = new Tooltip(document.getElementById("tooltip"), getGame);
 
 // Modal panels. While one is open the simulation is paused.
 const modalBackdrop = document.getElementById("modal-backdrop");
 const modal = document.getElementById("modal");
+const callbacks = { onClose: closePanel };
 const panels = {
-  character: new CharacterSheet(modal, game, { onClose: closePanel }),
-  trainer: new TrainerDialog(modal, game, { onClose: closePanel, onRespec: () => openPanel("character") }),
+  character: new CharacterSheet(modal, getGame, callbacks),
+  inventory: new InventoryPanel(modal, getGame, callbacks),
+  trainer: new TrainerDialog(modal, getGame, { ...callbacks, onRespec: () => openPanel("character") }),
+  potionVendor: new VendorDialog(modal, getGame, callbacks, "potionVendor"),
+  generalVendor: new VendorDialog(modal, getGame, callbacks, "generalVendor"),
+  stash: new StashPanel(modal, getGame, callbacks),
 };
+const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory" };
 let activePanel = null;
 
 document.getElementById("new-world").addEventListener("click", () => {
@@ -86,15 +99,23 @@ function frame(now) {
 }
 
 function handlePresses(pressed) {
+  for (const [code, id] of Object.entries(TOGGLE_KEYS)) {
+    if (!pressed.has(code)) continue;
+    if (activePanel === id) closePanel();
+    else openPanel(id);
+    return;
+  }
   if (pressed.has("Escape") && activePanel) {
     closePanel();
-  } else if (pressed.has("KeyC")) {
-    if (activePanel === "character") closePanel();
-    else openPanel("character");
-  } else if (pressed.has("KeyF") && !activePanel) {
+    return;
+  }
+  if (activePanel) return;
+  if (pressed.has("KeyF")) {
     const npc = game.nearbyNpc();
     if (npc && panels[npc.id]) openPanel(npc.id);
   }
+  if (pressed.has("KeyQ")) game.drinkPotion("hp");
+  if (pressed.has("KeyE")) game.drinkPotion("mana");
 }
 
 function openPanel(id) {
@@ -102,6 +123,7 @@ function openPanel(id) {
   activePanel = id;
   input.mouse.down = false; // the click that opened a panel must not become an attack
   input.consumeAttackPress();
+  modal.classList.toggle("wide", panels[id].wide);
   modalBackdrop.hidden = false;
   panels[id].open();
 }
@@ -113,6 +135,7 @@ function closePanel() {
   input.consumeAttackPress(); // presses made while paused don't carry over
   modalBackdrop.hidden = true;
   modal.innerHTML = "";
+  tooltip.hide();
 }
 
 // Follows the player and shares the view with the game so zombies never spawn on screen.

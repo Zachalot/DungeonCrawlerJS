@@ -37,6 +37,11 @@ export const RESPEC_COST_PER_LEVEL = 50; // gold
 export const INTERACT_RANGE = 1.5; // tiles
 export const PLAYER_IFRAMES = 0.5; // s of invulnerability after taking damage
 export const ATTACK_BUFFER_TIME = 0.2; // s a click made during cooldown waits to fire
+
+// Items.
+export const INVENTORY_SIZE = 24;
+export const STASH_SIZE = 24;
+export const POTION_COOLDOWN = 1; // s, shared by all potions
 export const RESPAWN_IFRAMES = 2; // s
 export const ARMOR_K = 50; // reduction = armor / (armor + ARMOR_K)
 

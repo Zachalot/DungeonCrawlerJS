@@ -4,6 +4,7 @@ import {
   OUT_OF_COMBAT_DELAY,
   PLAYER_IFRAMES,
   RESPAWN_IFRAMES,
+  STASH_SIZE,
   TILE_SIZE,
 } from "./config.js";
 import { ENEMIES } from "./data/enemies.js";
@@ -11,7 +12,12 @@ import { WEAPONS } from "./data/weapons.js";
 import { Player } from "./entities/player.js";
 import { Projectile } from "./entities/projectile.js";
 import { isInArc, mitigate } from "./systems/combat.js";
+import { STARTING_ITEMS } from "./data/items.js";
+import { VENDORS } from "./data/vendors.js";
+import { drinkBestPotion } from "./systems/consumables.js";
+import { buyEntry, repurchase, sellFromSlot } from "./systems/economy.js";
 import { Effects } from "./systems/effects.js";
+import { addInstance, addItem, createSlots, equipFromInventory, unequip } from "./systems/inventory.js";
 import { allocatePoints, grantXp, respec, respecCost } from "./systems/leveling.js";
 import { collectDrops, rollDrops } from "./systems/loot.js";
 import { applyRegen } from "./systems/regen.js";
@@ -29,7 +35,16 @@ export const TextColor = Object.freeze({
   blocked: "#9ca3af",
   reward: "#fbbf24",
   levelUp: "#a3e635",
+  heal: "#4ade80",
+  mana: "#60a5fa",
 });
+
+const PURCHASE_FAILURES = {
+  gold: "Not enough gold",
+  space: "Inventory full",
+  quiver: "Your quiver is full",
+  missing: "That item is gone",
+};
 
 /**
  * Overworld simulation, independent of the DOM. Call update() once per fixed
@@ -47,6 +62,12 @@ export class Game {
     this.events = []; // { type: "toast", text }
     this.time = 0;
     this.view = null; // camera rect in px, set by the renderer each frame
+
+    this.nextUid = 1;
+    this.newUid = () => `i${this.nextUid++}`;
+    this.stash = { gold: 0, items: createSlots(STASH_SIZE) };
+    this.buyback = []; // recently sold items; not saved
+    for (const { defId, qty } of STARTING_ITEMS) addItem(this.player.inventory, defId, qty, this.newUid);
 
     // Zombies treat the village as solid so they can never enter it.
     this.zombieSolids = {
@@ -66,6 +87,7 @@ export class Game {
     player.update(dt, controls.move, controls.aim, this.world);
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
     player.attackBuffer = Math.max(0, player.attackBuffer - dt);
+    player.potionCooldown = Math.max(0, player.potionCooldown - dt);
     player.iframes = Math.max(0, player.iframes - dt);
     player.flash = Math.max(0, player.flash - dt);
 
@@ -176,6 +198,89 @@ export class Game {
       VILLAGE_NPCS.find((npc) => Math.hypot((npc.tx + 0.5) * T - player.x, (npc.ty + 0.5) * T - player.y) <= INTERACT_RANGE * T) ??
       null
     );
+  }
+
+  /** Q/E: drinks the best potion for "hp" or "mana", with feedback. */
+  drinkPotion(resource) {
+    const result = drinkBestPotion(this.player, resource);
+    const label = resource === "hp" ? "health" : "mana";
+    if (result.ok) {
+      const color = resource === "hp" ? TextColor.heal : TextColor.mana;
+      this.effects.addText(this.player.x, this.player.y - this.player.half, `+${result.restored}`, color);
+    } else if (result.reason === "none") {
+      this.toast(`No ${label} potions`);
+    } else if (result.reason === "full") {
+      this.toast(resource === "hp" ? "Already at full health" : "Already at full mana");
+    } else if (result.reason === "cooldown") {
+      this.toast("Potions are on cooldown");
+    }
+    return result.ok;
+  }
+
+  equip(inventoryIndex) {
+    return equipFromInventory(this.player, inventoryIndex);
+  }
+
+  unequip(slot) {
+    if (unequip(this.player, slot)) return true;
+    if (this.player.equipment[slot]) this.toast("Inventory full");
+    return false;
+  }
+
+  /** Buys one entry from a vendor's stock list. */
+  buy(vendorId, entryIndex) {
+    const entry = VENDORS[vendorId].stock[entryIndex];
+    const result = buyEntry(this.player, entry, this.newUid);
+    if (!result.ok) this.toast(PURCHASE_FAILURES[result.reason]);
+    return result.ok;
+  }
+
+  /** Sells one item from an inventory slot. */
+  sell(inventoryIndex) {
+    return sellFromSlot(this.player, inventoryIndex, this.buyback) > 0;
+  }
+
+  buyBack(index) {
+    const result = repurchase(this.player, this.buyback, index, this.newUid);
+    if (!result.ok) this.toast(PURCHASE_FAILURES[result.reason]);
+    return result.ok;
+  }
+
+  /** Moves a whole stack from the inventory into the stash. */
+  stashDeposit(inventoryIndex) {
+    return this.moveStack(this.player.inventory, inventoryIndex, this.stash.items, "Stash full");
+  }
+
+  /** Moves a whole stack from the stash into the inventory. */
+  stashWithdraw(stashIndex) {
+    return this.moveStack(this.stash.items, stashIndex, this.player.inventory, "Inventory full");
+  }
+
+  moveStack(from, index, to, fullMessage) {
+    const instance = from[index];
+    if (!instance) return false;
+    const leftover = addInstance(to, instance, this.newUid);
+    if (leftover === instance.qty) {
+      this.toast(fullMessage);
+      return false;
+    }
+    if (leftover === 0) from[index] = null;
+    else instance.qty = leftover;
+    return true;
+  }
+
+  depositGold(amount) {
+    const moved = Math.min(amount, this.player.gold);
+    this.player.gold -= moved;
+    this.stash.gold += moved;
+    return moved;
+  }
+
+  withdrawGold(amount) {
+    const moved = Math.min(amount, this.stash.gold);
+    this.stash.gold -= moved;
+    this.player.gold += moved;
+    return moved;
   }
 
   /** Commits pending stat points from the character sheet. */

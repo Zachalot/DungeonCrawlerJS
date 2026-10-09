@@ -39,6 +39,9 @@ const COLORS = {
   swing: "rgba(255, 255, 255, 0.35)",
   npcOutline: "#2e1065",
   prompt: "#fbbf24",
+  chestTrim: "#3f2a14",
+  chestLock: "#fde047",
+  chestInside: "#1c1208",
 };
 
 /** Draws every tile intersecting the camera view. */
@@ -250,7 +253,7 @@ export function drawNpcLabels(ctx, game, camera) {
     drawLabel(ctx, npc.name, x, y);
     if (npc === nearby) {
       ctx.fillStyle = COLORS.prompt;
-      ctx.fillText("[F] Talk", x, y - 14);
+      ctx.fillText(npc.kind === "stash" ? "[F] Open" : "[F] Talk", x, y - 14);
     }
   }
 }
@@ -258,6 +261,10 @@ export function drawNpcLabels(ctx, game, camera) {
 function drawNpc(ctx, npc, camera) {
   const sx = (npc.tx + 0.5) * T - camera.x;
   const sy = (npc.ty + 0.5) * T - camera.y;
+  if (npc.kind === "stash") {
+    drawChest(ctx, sx, sy, npc.color, false);
+    return;
+  }
   const r = 11;
   drawShadow(ctx, sx, sy, r);
   ctx.fillStyle = npc.color;
@@ -275,6 +282,28 @@ function drawNpc(ctx, npc, camera) {
   ctx.lineTo(sx + 2, sy - 20);
   ctx.closePath();
   ctx.fill();
+}
+
+/** A wooden chest centered on (sx, sy); `open` draws the lid raised. */
+function drawChest(ctx, sx, sy, color, open) {
+  drawShadow(ctx, sx, sy + 2, 12);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = COLORS.chestTrim;
+  ctx.lineWidth = 2;
+  ctx.fillRect(sx - 12, sy - 6, 24, 14);
+  ctx.strokeRect(sx - 12, sy - 6, 24, 14);
+  if (open) {
+    ctx.fillStyle = COLORS.chestInside;
+    ctx.fillRect(sx - 11, sy - 5, 22, 4);
+    ctx.fillStyle = color;
+    ctx.fillRect(sx - 12, sy - 16, 24, 7);
+    ctx.strokeRect(sx - 12, sy - 16, 24, 7);
+  } else {
+    ctx.fillRect(sx - 12, sy - 12, 24, 7);
+    ctx.strokeRect(sx - 12, sy - 12, 24, 7);
+    ctx.fillStyle = COLORS.chestLock;
+    ctx.fillRect(sx - 2, sy - 7, 4, 5);
+  }
 }
 
 function drawShadow(ctx, sx, sy, r) {

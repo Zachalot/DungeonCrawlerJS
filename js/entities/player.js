@@ -1,4 +1,13 @@
-import { PLAYER_SIZE, PLAYER_SPEED, STARTING_ARROWS, STARTING_GOLD, STARTING_STATS, TILE_SIZE } from "../config.js";
+import {
+  INVENTORY_SIZE,
+  PLAYER_SIZE,
+  PLAYER_SPEED,
+  STARTING_ARROWS,
+  STARTING_GOLD,
+  STARTING_STATS,
+  TILE_SIZE,
+} from "../config.js";
+import { createEquipment, createSlots, totalArmor } from "../systems/inventory.js";
 import { maxHp, maxMana } from "../systems/stats.js";
 import { moveAndCollide } from "../world/collision.js";
 
@@ -19,7 +28,9 @@ export class Player {
     this.hp = maxHp(this.stats);
     this.mana = maxMana(this.stats);
     this.arrows = STARTING_ARROWS;
-    this.armor = 0; // from equipment in M4
+    this.inventory = createSlots(INVENTORY_SIZE);
+    this.equipment = createEquipment();
+    this.potionCooldown = 0; // s until another potion can be drunk
 
     this.weapon = "sword";
     this.attackCooldown = 0; // s until the next attack is allowed
@@ -55,6 +66,11 @@ export class Player {
   teleport(x, y) {
     this.x = this.prevX = x;
     this.y = this.prevY = y;
+  }
+
+  /** Total armor from equipped pieces. */
+  get armor() {
+    return totalArmor(this.equipment);
   }
 
   get tileX() {
