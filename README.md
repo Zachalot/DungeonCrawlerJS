@@ -142,6 +142,7 @@ Tests use Node's built-in test runner (Node 20+) and run automatically on every 
 - **Items:** inventory stacking, equipment, potions, vendors, buyback, stash
 - **Dungeons:** layout, room populations, chest loot weights, enter/exit, loot persistence and overflow
 - **Death and saving:** graves and the one-grave rule, save round-trips, migrations, validation, export/import, save slots
+- **Accounts:** sign-up outcomes, including a taken username or an email that already has an account
 - **Cloud sync:** per-account slots, offline saves, two-device hand-off, conflicts and their resolution, deletes, pushes racing new saves (against an in-memory fake of the cloud)
 - **Maps and tools:** fog of war, the map window, dungeon lookup, dev panel actions
 

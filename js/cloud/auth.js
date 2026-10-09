@@ -92,6 +92,9 @@ export class Auth {
       options: { data: { username }, emailRedirectTo: siteUrl() },
     });
     if (error) throw friendlyError(error);
+    // With Confirm email on, Supabase answers a taken email with a fake user (no identities)
+    // instead of an error, and creates nothing.
+    if (data.user?.identities?.length === 0) throw new Error(EMAIL_TAKEN);
     return { needsConfirmation: !data.session };
   }
 
@@ -161,12 +164,14 @@ function readAuthLink() {
   return { recovering: params.get("type") === "recovery" };
 }
 
+const EMAIL_TAKEN = "An account with that email already exists. Sign in instead, or use Forgot password? if you don't remember it.";
+
 const FRIENDLY_MESSAGES = [
   [/invalid login credentials/i, "Wrong email or password."],
   [/email not confirmed/i, "Confirm your email first: check your inbox for the link."],
   [/database error saving new user/i, "That username was just taken. Try another."],
   [/rate limit/i, "Too many attempts. Wait a few minutes and try again."],
-  [/user already registered/i, "An account with that email already exists. Sign in instead."],
+  [/user already registered/i, EMAIL_TAKEN],
   [/should be different from the old password/i, "Choose a password you haven't used for this account."],
   [/failed to fetch|network/i, "Can't reach the server. Check your connection and try again."],
 ];

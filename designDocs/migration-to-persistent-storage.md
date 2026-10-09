@@ -113,6 +113,8 @@ Player clicks the link
 ```
 With Confirm email off (setup only), `signUp` returns a session immediately and skips the email.
 
+**One account per email.** Supabase enforces this itself (a unique index on `auth.users.email`), so a second account can't be created. How it *answers* differs: with Confirm email off it returns the error `User already registered`; with Confirm email on it returns a fake user with an empty `identities` list and creates nothing, so sign-up doesn't reveal which emails are registered. The game treats both as "An account with that email already exists". The cost is that someone could learn whether an email has an account by trying to sign up with it. For a game that's an acceptable trade for not telling players "check your email" for an account that was never made. Gmail `+tag` and dot variants (`a.b@gmail.com` vs `ab@gmail.com`) count as different emails; blocking those would need extra normalization.
+
 #### 3.3.4 Sign-in and tokens
 ```
 Game: signInWithPassword({ email, password })
