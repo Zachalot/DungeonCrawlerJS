@@ -19,6 +19,7 @@ import { CharacterSheet } from "./ui/character.js";
 import { ChestPanel } from "./ui/chest.js";
 import { Hud } from "./ui/hud.js";
 import { InventoryPanel } from "./ui/inventory.js";
+import { MapPanel, Minimap } from "./ui/maps.js";
 import { Tooltip } from "./ui/items.js";
 import { PauseMenu } from "./ui/pause.js";
 import { QuickWheel } from "./ui/quickWheel.js";
@@ -70,8 +71,10 @@ const panels = {
   stash: new StashPanel(modal, getGame, callbacks),
   chest: new ChestPanel(modal, getGame, callbacks),
   pause: new PauseMenu(modal, getGame, { ...callbacks, onSave: () => saveNow("manual"), onQuit: quitToTitle, slot: () => slot }),
+  map: new MapPanel(modal, getGame, callbacks),
 };
-const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory" };
+const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory", KeyM: "map" };
+const minimap = new Minimap(document.getElementById("minimap"));
 let activePanel = null;
 
 const wheel = new QuickWheel(document.getElementById("quick-wheel"), getGame);
@@ -189,6 +192,7 @@ function frame(now) {
   drawInteractions(ctx, game, camera);
   drawGraveArrow(ctx, game, alpha, camera);
   hud.update(frameTime, game);
+  minimap.update(frameTime, game);
 }
 
 function handlePresses(pressed, released) {

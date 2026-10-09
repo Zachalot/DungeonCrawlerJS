@@ -30,6 +30,18 @@ export function dungeonForCell(seed, cellX, cellY) {
   };
 }
 
+/** Every dungeon entrance whose cell overlaps the tile rectangle [x0, x1] × [y0, y1]. */
+export function dungeonsInRect(seed, x0, y0, x1, y1) {
+  const list = [];
+  for (let cy = Math.floor(y0 / DUNGEON_CELL_SIZE); cy <= Math.floor(y1 / DUNGEON_CELL_SIZE); cy++) {
+    for (let cx = Math.floor(x0 / DUNGEON_CELL_SIZE); cx <= Math.floor(x1 / DUNGEON_CELL_SIZE); cx++) {
+      const entrance = dungeonForCell(seed, cx, cy);
+      if (entrance) list.push(entrance);
+    }
+  }
+  return list;
+}
+
 /** Returns the dungeon entrance of the cell containing a tile, or null. */
 export function dungeonForTile(seed, tx, ty) {
   return dungeonForCell(seed, Math.floor(tx / DUNGEON_CELL_SIZE), Math.floor(ty / DUNGEON_CELL_SIZE));
