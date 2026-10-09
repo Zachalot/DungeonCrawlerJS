@@ -1,12 +1,14 @@
 import { INVENTORY_SIZE, STASH_SIZE } from "./config.js";
-import { EQUIP_SLOTS, ITEMS, STARTER_WEAPONS } from "./data/items.js";
+import { MATERIAL_TYPES, RUNE_TYPES } from "./data/enemies.js";
+import { EQUIP_SLOTS, ITEMS, STARTER_WEAPONS, potionId } from "./data/items.js";
+import { STRUCTURES } from "./data/structures.js";
 import { WEAPONS } from "./data/weapons.js";
 import { Game } from "./game.js";
 import { STAT_KEYS } from "./systems/leveling.js";
 import { dungeonForCell } from "./world/dungeons.js";
 import { Fog } from "./world/fog.js";
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SLOT_COUNT = 3;
 const KEY_PREFIX = "dungeonCrawler.slot";
 const SIZE_WARNING_BYTES = 1024 * 1024;
@@ -28,6 +30,36 @@ export const MIGRATIONS = Object.freeze({
   },
   // v3: fog of war. Older saves start with nothing explored; it fills in as you walk.
   2: (save) => ({ ...save, version: 3, explored: {} }),
+  // v4: crafting and bosses. Potions got levels (Minor → level 1, Greater → your level), and
+  // saves gained the materials pouch, runes, the Gathering skill, village structures, harvested
+  // trees and rocks, the dungeon floor you're on, and tutorial flags.
+  3: (save) => {
+    const level = save.player.level;
+    const renamed = { minor_hp_potion: potionId("hp", 1), minor_mana_potion: potionId("mana", 1), greater_hp_potion: potionId("hp", level), greater_mana_potion: potionId("mana", level) };
+    const fix = (instance) => (instance && renamed[instance.defId] ? { ...instance, defId: renamed[instance.defId] } : instance);
+    const dungeons = Object.fromEntries(
+      Object.entries(save.dungeons).map(([id, d]) => [id, { visited: false, ...d, chest: d.chest && { ...d.chest, items: d.chest.items.map(fix) } }]),
+    );
+    return {
+      ...save,
+      version: 4,
+      player: {
+        ...save.player,
+        location: { floor: 0, ...save.player.location },
+        inventory: save.player.inventory.map(fix),
+        materials: Object.fromEntries(MATERIAL_TYPES.map((id) => [id, 0])),
+        runes: Object.fromEntries(RUNE_TYPES.map((id) => [id, 0])),
+        harvests: 0,
+        wheelLevels: {},
+      },
+      stash: { ...save.stash, items: save.stash.items.map(fix) },
+      grave: save.grave && { ...save.grave, items: save.grave.items.map(fix) },
+      dungeons,
+      structures: [],
+      harvested: {},
+      flags: { seenBoss: false, seenRune: false },
+    };
+  },
 });
 
 // ---- Serialization ----------------------------------------------------------
@@ -44,7 +76,7 @@ export function serializeGame(game) {
     player: {
       x: player.x,
       y: player.y,
-      location: game.inDungeon ? { type: "dungeon", id: game.area.id } : { type: "overworld" },
+      location: game.inDungeon ? { type: "dungeon", id: game.area.id, floor: game.visit.floor } : { type: "overworld" },
       level: player.level,
       xp: player.xp,
       unspentPoints: player.unspentPoints,
@@ -56,11 +88,18 @@ export function serializeGame(game) {
       weapon: player.weapon,
       equipment: clone(player.equipment),
       inventory: clone(player.inventory),
+      materials: { ...player.materials },
+      runes: { ...player.runes },
+      harvests: player.harvests,
+      wheelLevels: { ...player.wheelLevels },
     },
     stash: clone(game.stash),
     grave: clone(game.grave),
     dungeons: Object.fromEntries([...game.dungeonState].map(([id, state]) => [id, clone(state)])),
     explored: game.fog.serialize(),
+    structures: clone(game.structures),
+    harvested: Object.fromEntries(game.world.harvested),
+    flags: { ...game.flags },
   };
 }
 
@@ -80,6 +119,10 @@ export function restoreGame(data, options = {}) {
     weapon: WEAPONS[data.player.weapon] ? data.player.weapon : "sword",
     equipment: clone(data.player.equipment),
     inventory: clone(data.player.inventory),
+    materials: { ...p.materials, ...data.player.materials },
+    runes: { ...p.runes, ...data.player.runes },
+    harvests: data.player.harvests,
+    wheelLevels: { ...data.player.wheelLevels },
   });
   game.nextUid = data.nextUid;
   game.playTime = data.playTime;
@@ -87,13 +130,17 @@ export function restoreGame(data, options = {}) {
   game.grave = clone(data.grave);
   game.dungeonState = new Map(Object.entries(clone(data.dungeons)));
   game.fog = Fog.deserialize(data.explored);
+  game.structures = clone(data.structures);
+  game.syncStructures();
+  game.world.harvested = new Map(Object.entries(data.harvested));
+  game.flags = { ...game.flags, ...data.flags };
 
   const { location } = data.player;
   const [cellX, cellY] = location.type === "dungeon" ? location.id.split("_").map(Number) : [];
   const entrance = location.type === "dungeon" ? dungeonForCell(data.seed, cellX, cellY) : null;
   if (entrance) {
     game.player.teleport(data.player.x, data.player.y); // overworld fallback if the dungeon is gone
-    game.enterDungeon(entrance, { silent: true });
+    game.enterDungeon(entrance, { silent: true, floor: location.floor ?? 0 });
   } else {
     game.player.teleport(data.player.x, data.player.y);
     game.wasSafe = game.isPlayerSafe();
@@ -141,6 +188,10 @@ export function validateSave(data) {
   }
   if (typeof data.dungeons !== "object" || data.dungeons === null) fail("dungeons");
   if (typeof data.explored !== "object" || data.explored === null) fail("explored");
+  if (!MATERIAL_TYPES.every((k) => Number.isFinite(p.materials?.[k]))) fail("player.materials");
+  if (!RUNE_TYPES.every((k) => Number.isFinite(p.runes?.[k]))) fail("player.runes");
+  if (!Array.isArray(data.structures) || !data.structures.every((st) => STRUCTURES[st.kind] && Number.isInteger(st.level))) fail("structures");
+  if (typeof data.harvested !== "object" || data.harvested === null) fail("harvested");
   return data;
 }
 

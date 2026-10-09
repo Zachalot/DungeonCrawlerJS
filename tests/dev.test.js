@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { TILE_SIZE } from "../js/config.js";
-import { ENEMIES } from "../js/data/enemies.js";
-import { Zombie } from "../js/entities/zombie.js";
+import { MATERIAL_TYPES, RUNE_TYPES } from "../js/data/enemies.js";
+import { Enemy } from "../js/entities/enemy.js";
 import { Game } from "../js/game.js";
+import { countItem } from "../js/systems/inventory.js";
+import { enemyAtLevel, levelAt } from "../js/systems/scaling.js";
 import * as dev from "../js/systems/dev.js";
 import { devPanelEnabled } from "../js/ui/devPanel.js";
 import { dungeonForCell } from "../js/world/dungeons.js";
@@ -57,24 +59,47 @@ describe("dev tools", () => {
     assert.equal(game.player.tileX, 100);
   });
 
-  it("kills zombies within range, with the normal rewards", () => {
+  it("kills enemies within range, with the normal rewards", () => {
     const game = new Game(42);
-    game.zombies = [];
-    const near = new Zombie(ENEMIES.zombie_l1, { id: "a", tx: 201, ty: 205 });
-    const far = new Zombie(ENEMIES.zombie_l1, { id: "b", tx: 240, ty: 240 });
-    game.zombies.push(near, far);
+    game.enemies = [];
+    const near = new Enemy(enemyAtLevel("zombie", 1), { id: "a", tx: 201, ty: 205 });
+    const far = new Enemy(enemyAtLevel("zombie", 1), { id: "b", tx: 240, ty: 240 });
+    game.enemies.push(near, far);
     assert.equal(dev.killNearby(game), 1);
     assert.ok(near.dead && !far.dead);
     assert.equal(game.player.xp, 10);
   });
 
-  it("reveals the whole current area", () => {
+  it("reveals the dungeon floor, or a big square of the endless overworld around you", () => {
     const game = new Game(42);
     dev.revealMap(game);
-    assert.ok(game.fog.isExplored(0, 0) && game.fog.isExplored(399, 399));
+    const { tileX, tileY } = game.player;
+    assert.ok(game.fog.isExplored(tileX - 100, tileY - 100) && game.fog.isExplored(tileX + 100, tileY + 100));
+    assert.ok(!game.fog.isExplored(tileX + 300, tileY));
     game.enterDungeon(dungeonForCell(42, 3, 4));
     dev.revealMap(game);
     assert.ok(game.dungeonFog.isExplored(59, 59));
+  });
+});
+
+describe("dev tools for crafting and depth", () => {
+  it("teleports to a dungeon one level deeper each time", () => {
+    const game = new Game(42);
+    assert.equal(dev.teleportToDeeperDungeon(game), 2);
+    assert.equal(levelAt(game.player.tileX, game.player.tileY - 1), 2);
+    assert.equal(dev.teleportToDeeperDungeon(game), 3);
+  });
+
+  it("hands out materials, runes, and tools", () => {
+    const game = new Game(42);
+    dev.addMaterials(game);
+    dev.addRunes(game);
+    assert.equal(game.player.materials.stone, 100);
+    assert.ok(MATERIAL_TYPES.every((id) => game.player.materials[id] >= 20));
+    assert.ok(RUNE_TYPES.every((id) => game.player.runes[id] === 5));
+    assert.equal(dev.addTools(game), 2);
+    assert.equal(dev.addTools(game), 0, "only once");
+    assert.equal(countItem(game.player.inventory, "starter_axe"), 1);
   });
 });
 

@@ -8,6 +8,8 @@ export const Purpose = Object.freeze({
   DUNGEON_Y: 4,
   SPAWN: 5,
   DUNGEON_LAYOUT: 6,
+  SPAWN_TYPE: 7,
+  FLOOR_TYPES: 8,
 });
 
 /** Integer in [min, max] inclusive from a [0, 1) PRNG. */

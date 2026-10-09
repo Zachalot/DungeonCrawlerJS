@@ -1,6 +1,5 @@
 import { CHUNK_SIZE, ROCK_DENSITY, TREE_DENSITY, ZOMBIE_SPAWN_DENSITY } from "../config.js";
 import { Purpose, hash, hashFloat } from "../rng.js";
-import { isBorder } from "./bounds.js";
 import { dungeonForTile } from "./dungeons.js";
 import { Tile } from "./tiles.js";
 import { bufferTile, isInVillage, isInVillageBuffer, villageTile } from "./village.js";
@@ -9,7 +8,6 @@ import { bufferTile, isInVillage, isInVillageBuffer, villageTile } from "./villa
  * Returns the tile at a world coordinate. Pure: depends only on (seed, tx, ty).
  */
 export function generateTile(seed, tx, ty) {
-  if (isBorder(tx, ty)) return Tile.BORDER;
   if (isInVillage(tx, ty)) return villageTile(tx, ty);
   if (isInVillageBuffer(tx, ty)) return bufferTile(tx, ty);
 
@@ -25,14 +23,14 @@ export function generateTile(seed, tx, ty) {
   return Tile.GRASS;
 }
 
-/** True if an overworld tile hosts a zombie spawn point. */
+/** True if an overworld tile hosts an enemy spawn point. */
 export function isSpawnPoint(seed, tx, ty, tile) {
   return tile === Tile.GRASS && !isInVillageBuffer(tx, ty) && hashFloat(seed, tx, ty, Purpose.SPAWN) < ZOMBIE_SPAWN_DENSITY;
 }
 
 /**
  * Returns a CHUNK_SIZE² block of tiles, per-tile visual variants (0–255), and
- * the dungeon entrances and zombie spawn points it contains.
+ * the dungeon entrances and enemy spawn points it contains.
  * Pure: depends only on (seed, chunkX, chunkY).
  */
 export function generateChunk(seed, chunkX, chunkY) {

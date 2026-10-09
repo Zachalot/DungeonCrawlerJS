@@ -52,6 +52,20 @@ export class Fog {
     return true;
   }
 
+  /** Tile rectangle covering every explored chunk: { x0, y0, w, h }, or null if nothing is explored. */
+  bounds() {
+    if (this.chunks.size === 0) return null;
+    let [minX, minY, maxX, maxY] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const key of this.chunks.keys()) {
+      const [cx, cy] = key.split(",").map(Number);
+      minX = Math.min(minX, cx);
+      minY = Math.min(minY, cy);
+      maxX = Math.max(maxX, cx);
+      maxY = Math.max(maxY, cy);
+    }
+    return { x0: minX * CHUNK_SIZE, y0: minY * CHUNK_SIZE, w: (maxX - minX + 1) * CHUNK_SIZE, h: (maxY - minY + 1) * CHUNK_SIZE };
+  }
+
   /** { "cx,cy": base64 } for saving. */
   serialize() {
     const out = {};

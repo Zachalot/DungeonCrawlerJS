@@ -1,41 +1,68 @@
 import {
   DUNGEON_CORRIDOR_WIDTH,
+  DUNGEON_FLOORS,
   DUNGEON_PACK_SIZE,
   DUNGEON_ROOM_COUNT,
   DUNGEON_ROOM_GAP,
   DUNGEON_ROOM_SIZE,
   DUNGEON_SIZE,
+  DUNGEON_TYPES_PER_FLOOR,
   DUNGEON_ZOMBIES_PER_ROOM,
   TILE_SIZE,
 } from "../config.js";
+import { NORMAL_ENEMIES } from "../data/enemies.js";
 import { Purpose, hash, mulberry32, randomInt } from "../rng.js";
+import { typesAtLevel } from "../systems/scaling.js";
 import { Tile, isSolid } from "./tiles.js";
 
 const ROOM_ATTEMPTS = 300;
 
-/** A dungeon interior. Same tile-access interface as World, so the game can treat both as an "area". */
+/** Floors in a dungeon of `level` (one below level 4). */
+export function floorsFor(level) {
+  return DUNGEON_FLOORS.filter(([from]) => level >= from).at(-1)[1];
+}
+
+/**
+ * One floor of a dungeon interior. Same tile-access interface as World, so the game can treat
+ * both as an "area". Floor 0 starts at the exit portal; deeper floors start at stairs up. Every
+ * floor but the last ends at stairs down; the last ends in the treasure room, with the chest,
+ * the boss's spot, and an escape rope straight back to the surface.
+ */
 export class Dungeon {
-  constructor({ id, level, entrance, tiles, variants, rooms, portal, chest, ladder, zombieSpawns }) {
+  constructor(fields) {
     this.kind = "dungeon";
-    this.id = id;
-    this.level = level;
-    this.entrance = entrance; // overworld entrance { tx, ty }
     this.width = DUNGEON_SIZE;
     this.height = DUNGEON_SIZE;
     this.widthPx = DUNGEON_SIZE * TILE_SIZE;
     this.heightPx = DUNGEON_SIZE * TILE_SIZE;
-    this.tiles = tiles;
-    this.variants = variants;
-    this.rooms = rooms;
-    this.portal = portal; // { tx, ty }, in the start room
-    this.chest = chest; // { tx, ty }, in the farthest room
-    this.ladder = ladder; // { tx, ty }, beside the chest: a shortcut back to the surface
-    this.zombieSpawns = zombieSpawns; // [{ id, tx, ty }]
+    Object.assign(this, fields);
+    // id, level, floor, floors, entrance ({ tx, ty } on the overworld), tiles, variants, rooms,
+    // arrival ({ tx, ty }: the portal or stairs up), stairsDown, chest, rope, bossSpawn
+    // ({ tx, ty } or null), enemySpawns ([{ id, tx, ty, type }]).
   }
 
-  /** Player arrival point in px: just below the exit portal. */
+  get isLastFloor() {
+    return this.floor === this.floors - 1;
+  }
+
+  /** The exit portal on floor 0, or null. */
+  get portal() {
+    return this.floor === 0 ? this.arrival : null;
+  }
+
+  /** Stairs back up on deeper floors, or null. */
+  get stairsUp() {
+    return this.floor > 0 ? this.arrival : null;
+  }
+
+  /** Player arrival point in px: just below the portal or stairs up. */
   get start() {
-    return { x: (this.portal.tx + 0.5) * TILE_SIZE, y: (this.portal.ty + 1.5) * TILE_SIZE };
+    return { x: (this.arrival.tx + 0.5) * TILE_SIZE, y: (this.arrival.ty + 1.5) * TILE_SIZE };
+  }
+
+  /** Where you arrive coming back up from the floor below: just below the stairs down. */
+  get belowStairsDown() {
+    return { x: (this.stairsDown.tx + 0.5) * TILE_SIZE, y: (this.stairsDown.ty + 1.5) * TILE_SIZE };
   }
 
   getTileInfo(tx, ty) {
@@ -58,15 +85,17 @@ export class Dungeon {
 }
 
 /**
- * Generates the interior behind an overworld entrance. Pure: the same (seed, entrance)
- * always yields the same layout, so only cleared/looted state needs saving.
+ * Generates one floor of the interior behind an overworld entrance. Pure: the same
+ * (seed, entrance, floor) always yields the same layout, so only cleared/looted state needs saving.
  */
-export function generateDungeon(seed, entrance) {
+export function generateDungeon(seed, entrance, floor = 0) {
   const [cellX, cellY] = entrance.id.split("_").map(Number);
-  const random = mulberry32(hash(seed, cellX, cellY, Purpose.DUNGEON_LAYOUT));
+  const floors = floorsFor(entrance.level);
+  const layoutSeed = floor === 0 ? hash(seed, cellX, cellY, Purpose.DUNGEON_LAYOUT) : hash(seed, cellX, cellY, Purpose.DUNGEON_LAYOUT, floor);
+  const random = mulberry32(layoutSeed);
   const size = DUNGEON_SIZE;
   const tiles = new Uint8Array(size * size).fill(Tile.DUNGEON_WALL);
-  const variants = new Uint8Array(size * size).map((_, i) => hash(seed, cellX, cellY, i) & 0xff);
+  const variants = new Uint8Array(size * size).map((_, i) => hash(seed, cellX, cellY, floor, i) & 0xff);
   const carve = (x, y) => {
     if (x > 0 && y > 0 && x < size - 1 && y < size - 1) tiles[y * size + x] = Tile.DUNGEON_FLOOR;
   };
@@ -82,22 +111,28 @@ export function generateDungeon(seed, entrance) {
   }
 
   const startRoom = rooms[0];
-  const portal = center(startRoom);
-  tiles[portal.ty * size + portal.tx] = Tile.EXIT_PORTAL;
+  const arrival = center(startRoom);
+  tiles[arrival.ty * size + arrival.tx] = floor === 0 ? Tile.EXIT_PORTAL : Tile.STAIRS_UP;
 
-  const { distances, parents } = floodFrom(tiles, portal);
+  const { distances, parents } = floodFrom(tiles, arrival);
   const roomDistance = (r) => distances[center(r).ty * size + center(r).tx];
-  const chestRoom = rooms.slice(1).reduce((best, r) => (roomDistance(r) > roomDistance(best) ? r : best));
-  const chest = center(chestRoom);
-  // Two tiles east of the chest: rooms are at least 6 wide and the chest sits at x + floor(w/2), so this stays inside.
-  const ladder = { tx: chest.tx + 2, ty: chest.ty };
-  const packRoom = roomBeforeChest(rooms, chestRoom, startRoom, chest, parents);
+  const endRoom = rooms.slice(1).reduce((best, r) => (roomDistance(r) > roomDistance(best) ? r : best));
+  const end = center(endRoom);
+  const isLast = floor === floors - 1;
+  // The chest sits at x + floor(w/2) in a room at least 6 wide, so ±2 tiles stays inside.
+  const chest = isLast ? end : null;
+  const rope = isLast ? { tx: end.tx + 2, ty: end.ty } : null;
+  const bossSpawn = isLast ? { tx: end.tx - 2, ty: end.ty } : null;
+  const stairsDown = isLast ? null : end;
+  if (stairsDown) tiles[stairsDown.ty * size + stairsDown.tx] = Tile.STAIRS_DOWN;
+  const packRoom = roomBeforeEnd(rooms, endRoom, startRoom, end, parents);
 
-  const zombieSpawns = [];
+  const types = floorTypes(seed, cellX, cellY, floor, entrance.level);
+  const enemySpawns = [];
   for (const room of rooms) {
     if (room === startRoom) continue;
     const [min, max] = room === packRoom ? DUNGEON_PACK_SIZE : DUNGEON_ZOMBIES_PER_ROOM;
-    const used = new Set([`${chest.tx},${chest.ty}`, `${ladder.tx},${ladder.ty}`]);
+    const used = new Set([end, rope, bossSpawn].filter(Boolean).map((p) => `${p.tx},${p.ty}`));
     const count = randomInt(random, min, max);
     for (let n = 0; n < count; n++) {
       let tx, ty;
@@ -106,11 +141,39 @@ export function generateDungeon(seed, entrance) {
         ty = randomInt(random, room.y + 1, room.y + room.h - 2);
       } while (used.has(`${tx},${ty}`));
       used.add(`${tx},${ty}`);
-      zombieSpawns.push({ id: `${entrance.id}:${zombieSpawns.length}`, tx, ty });
+      const type = types[Math.floor(random() * types.length)];
+      enemySpawns.push({ id: `${entrance.id}:${floor}:${enemySpawns.length}`, tx, ty, type });
     }
   }
 
-  return new Dungeon({ id: entrance.id, level: entrance.level, entrance, tiles, variants, rooms, portal, chest, ladder, zombieSpawns });
+  return new Dungeon({
+    id: entrance.id,
+    level: entrance.level,
+    floor,
+    floors,
+    entrance,
+    tiles,
+    variants,
+    rooms,
+    arrival,
+    stairsDown,
+    chest,
+    rope,
+    bossSpawn,
+    enemySpawns,
+  });
+}
+
+/** Up to DUNGEON_TYPES_PER_FLOOR enemy types for a floor, picked from those of the dungeon's level. */
+export function floorTypes(seed, cellX, cellY, floor, level) {
+  const random = mulberry32(hash(seed, cellX, cellY, floor, Purpose.FLOOR_TYPES));
+  const pool = typesAtLevel(level, NORMAL_ENEMIES);
+  // Fisher–Yates with the floor's own seed, then keep the first few.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, DUNGEON_TYPES_PER_FLOOR);
 }
 
 function placeRooms(random) {
@@ -178,14 +241,14 @@ function floodFrom(tiles, origin) {
   return { distances, parents };
 }
 
-// Walks the shortest path back from the chest and returns the first other room it passes through.
-function roomBeforeChest(rooms, chestRoom, startRoom, chest, parents) {
+// Walks the shortest path back from the end room and returns the first other room it passes through.
+function roomBeforeEnd(rooms, endRoom, startRoom, end, parents) {
   const size = DUNGEON_SIZE;
   const inRoom = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
-  for (let i = chest.ty * size + chest.tx; i !== -1; i = parents[i]) {
+  for (let i = end.ty * size + end.tx; i !== -1; i = parents[i]) {
     const x = i % size;
     const y = (i - x) / size;
-    const room = rooms.find((r) => r !== chestRoom && inRoom(r, x, y));
+    const room = rooms.find((r) => r !== endRoom && inRoom(r, x, y));
     if (room) return room === startRoom ? null : room;
   }
   return null;

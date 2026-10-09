@@ -7,7 +7,7 @@ import { mulberry32 } from "../js/rng.js";
 import { MIGRATIONS, SAVE_VERSION, SaveStore, exportSave, importSave, migrate, restoreGame, serializeGame, validateSave } from "../js/save.js";
 import { buryGear, recoverGrave } from "../js/systems/death.js";
 import { addItem, countItem } from "../js/systems/inventory.js";
-import { dungeonForCell } from "../js/world/dungeons.js";
+import { dungeonForCell, dungeonsInRect } from "../js/world/dungeons.js";
 import { VILLAGE_SPAWN } from "../js/world/village.js";
 
 const T = TILE_SIZE;
@@ -68,7 +68,7 @@ describe("death and graves", () => {
     const game = geared(new Game(42));
     game.player.teleport(150 * T, 150 * T);
     killPlayer(game);
-    addItem(game.player.inventory, "minor_hp_potion", 1, game.newUid);
+    addItem(game.player.inventory, "hp_potion_1", 1, game.newUid);
     game.player.teleport(160 * T, 160 * T);
     killPlayer(game);
     assert.deepEqual([game.grave.x, game.grave.y], [160 * T, 160 * T]);
@@ -111,7 +111,7 @@ describe("serialize / restore", () => {
     game.player.level = 4;
     game.player.xp = 33;
     game.stash.gold = 12;
-    addItem(game.stash.items, "greater_mana_potion", 2, game.newUid);
+    addItem(game.stash.items, "mana_potion_3", 2, game.newUid);
     game.dungeonStatus("3_4").cleared = true;
     game.dungeonStatus("3_4").chest = { gold: 0, items: [{ arrows: 100 }] };
     game.grave = { x: 10, y: 20, equipment: { helmet: null, chest: null, legs: null, gloves: null, boots: null }, items: [], arrows: 5 };
@@ -123,7 +123,7 @@ describe("serialize / restore", () => {
     assert.deepEqual(serializeGame(restored).player, data.player);
     assert.deepEqual(restored.stash, game.stash);
     assert.deepEqual(restored.grave, game.grave);
-    assert.deepEqual(restored.dungeonStatus("3_4"), { cleared: true, chest: { gold: 0, items: [{ arrows: 100 }] } });
+    assert.deepEqual(restored.dungeonStatus("3_4"), { cleared: true, chest: { gold: 0, items: [{ arrows: 100 }] }, visited: false });
     assert.equal(restored.nextUid, game.nextUid);
     assert.equal(restored.playTime, 125);
     assert.equal(restored.player.armor, game.player.armor);
@@ -144,8 +144,69 @@ describe("serialize / restore", () => {
     assert.ok(restored.inDungeon);
     assert.equal(restored.area.id, "3_4");
     assert.deepEqual([restored.player.x, restored.player.y], [restored.area.start.x, restored.area.start.y]);
-    assert.ok(restored.zombies.length > 0);
+    assert.ok(restored.enemies.length > 0);
     assert.equal(restored.events.length, 0, "silent: no toast or autosave");
+  });
+});
+
+describe("save v4: crafting, bosses, floors", () => {
+  it("round-trips the pouch, runes, gathering, wheel picks, structures, harvested nodes, and flags", () => {
+    const game = new Game(42);
+    Object.assign(game.player.materials, { wood: 12, stone: 7, blueGoop: 3 });
+    game.player.runes.str = 4;
+    game.player.harvests = 41;
+    game.player.wheelLevels = { hp: 2 };
+    game.player.equipment.sword.enchants = { str: 2 };
+    game.structures.push({ kind: "enchantingTable", tx: 196, ty: 197, level: 2 });
+    game.syncStructures();
+    game.world.harvested.set("150,150", 300);
+    game.flags.seenBoss = true;
+
+    const restored = restoreGame(JSON.parse(JSON.stringify(serializeGame(game))));
+    assert.deepEqual(restored.player.materials, game.player.materials);
+    assert.deepEqual(restored.player.runes, game.player.runes);
+    assert.deepEqual([restored.player.harvests, restored.player.wheelLevels], [41, { hp: 2 }]);
+    assert.deepEqual(restored.player.equipment.sword.enchants, { str: 2 });
+    assert.equal(restored.stats.str, 5 + 6, "runes count toward stats after loading");
+    assert.deepEqual(restored.structures, game.structures);
+    assert.ok(restored.world.isSolidAt(197, 197), "the table is solid again");
+    assert.equal(restored.world.harvested.get("150,150"), 300);
+    assert.equal(restored.flags.seenBoss, true);
+  });
+
+  it("resumes on the dungeon floor you saved on", () => {
+    const game = new Game(42);
+    const entrance = dungeonsInRect(42, 0, 0, 399, 399).find((d) => d.level >= 4);
+    game.enterDungeon(entrance);
+    game.changeFloor(1);
+    const data = serializeGame(game);
+    assert.equal(data.player.location.floor, 1);
+    const restored = restoreGame(JSON.parse(JSON.stringify(data)));
+    assert.equal(restored.area.floor, 1);
+    assert.deepEqual([restored.player.x, restored.player.y], [restored.area.start.x, restored.area.start.y]);
+  });
+
+  it("upgrades a v3 save: old potions become leveled ones, and the new fields start empty", () => {
+    const v3 = serializeGame(new Game(42));
+    v3.version = 3;
+    for (const key of ["structures", "harvested", "flags"]) delete v3[key];
+    for (const key of ["materials", "runes", "harvests", "wheelLevels"]) delete v3.player[key];
+    v3.player.level = 4;
+    v3.player.inventory[0] = { uid: "a", defId: "minor_hp_potion", qty: 2 };
+    v3.player.inventory[1] = { uid: "b", defId: "greater_mana_potion", qty: 1 };
+    v3.stash.items[0] = { uid: "c", defId: "greater_hp_potion", qty: 3 };
+    v3.dungeons = { "3_4": { cleared: true, chest: { gold: 0, items: [{ defId: "greater_hp_potion", qty: 3 }] } } };
+    v3.player.location = { type: "overworld" };
+
+    const save = validateSave(migrate(JSON.parse(JSON.stringify(v3))));
+    assert.equal(save.version, SAVE_VERSION);
+    assert.deepEqual(save.player.inventory.slice(0, 2).map((i) => i.defId), ["hp_potion_1", "mana_potion_4"]);
+    assert.equal(save.stash.items[0].defId, "hp_potion_4");
+    assert.equal(save.dungeons["3_4"].chest.items[0].defId, "hp_potion_4");
+    assert.equal(save.player.materials.wood, 0);
+    assert.deepEqual(save.structures, []);
+    assert.equal(save.player.location.floor, 0);
+    restoreGame(save); // loads cleanly
   });
 });
 

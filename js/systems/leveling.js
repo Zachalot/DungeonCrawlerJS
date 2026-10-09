@@ -1,10 +1,11 @@
-import { RESPEC_COST_PER_LEVEL, STARTING_STATS, STAT_POINTS_PER_LEVEL, XP_PER_LEVEL } from "../config.js";
-import { maxHp, maxMana } from "./stats.js";
+import { RESPEC_COST_PER_LEVEL, STARTING_STATS, STAT_POINTS_PER_LEVEL, XP_CURVE, XP_PER_LEVEL } from "../config.js";
+import { maxHp, maxMana, totalStats } from "./stats.js";
 
 export const STAT_KEYS = Object.freeze(["str", "int", "dex", "end"]);
 
+/** XP needed to go from `level` to the next: grows exponentially, so leveling slows down. */
 export function xpToNext(level) {
-  return XP_PER_LEVEL * level;
+  return Math.floor(XP_PER_LEVEL * level * XP_CURVE ** (level - 1));
 }
 
 /** Adds XP, levelling up as many times as it covers. Returns the number of levels gained. */
@@ -18,8 +19,9 @@ export function grantXp(player, amount) {
     gained++;
   }
   if (gained > 0) {
-    player.hp = maxHp(player.stats);
-    player.mana = maxMana(player.stats);
+    const stats = totalStats(player);
+    player.hp = maxHp(stats);
+    player.mana = maxMana(stats);
   }
   return gained;
 }
@@ -41,11 +43,12 @@ export function allocatePoints(player, pending) {
   const valid = STAT_KEYS.every((key) => Number.isInteger(pending[key] ?? 0) && (pending[key] ?? 0) >= 0);
   if (!valid || total === 0 || total > player.unspentPoints) return false;
 
-  const before = { hp: maxHp(player.stats), mana: maxMana(player.stats) };
+  const before = totalStats(player);
   player.stats = previewStats(player.stats, pending);
   player.unspentPoints -= total;
-  player.hp += maxHp(player.stats) - before.hp;
-  player.mana += maxMana(player.stats) - before.mana;
+  const after = totalStats(player);
+  player.hp += maxHp(after) - maxHp(before);
+  player.mana += maxMana(after) - maxMana(before);
   return true;
 }
 
@@ -60,7 +63,8 @@ export function respec(player) {
   player.gold -= cost;
   player.stats = { ...STARTING_STATS };
   player.unspentPoints = (player.level - 1) * STAT_POINTS_PER_LEVEL;
-  player.hp = Math.min(player.hp, maxHp(player.stats));
-  player.mana = Math.min(player.mana, maxMana(player.stats));
+  const stats = totalStats(player);
+  player.hp = Math.min(player.hp, maxHp(stats));
+  player.mana = Math.min(player.mana, maxMana(stats));
   return true;
 }

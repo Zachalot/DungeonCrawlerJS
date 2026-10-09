@@ -8,11 +8,13 @@ A top-down 2D dungeon crawler RPG proof of concept in vanilla JavaScript, HTML, 
 
 That's the latest `main`, deployed by GitHub Pages about a minute after each merge. If you just merged and don't see the change, wait a minute and hard-refresh (Ctrl+Shift+R / Cmd+Shift+R).
 
-See [designDocs/dungeon-crawler-design-doc.md](designDocs/dungeon-crawler-design-doc.md) for the full design, [designDocs/migration-to-persistent-storage.md](designDocs/migration-to-persistent-storage.md) for accounts and cloud saves, and [designDocs/multiplayerDesign.md](designDocs/multiplayerDesign.md) for future multiplayer plans.
+See [designDocs/dungeon-crawler-design-doc.md](designDocs/dungeon-crawler-design-doc.md) for the full design, [designDocs/migration-to-persistent-storage.md](designDocs/migration-to-persistent-storage.md) for accounts and cloud saves, [designDocs/progression-and-crafting.md](designDocs/progression-and-crafting.md) for leveling, enemy scaling, bosses, runes, and crafting, and [designDocs/multiplayerDesign.md](designDocs/multiplayerDesign.md) for future multiplayer plans.
 
 ## How to play
 
-You start in the walled village, where zombies can't reach you. Gear up, head into the wilderness, and find dungeons; there's about one every 50 tiles. Clear a dungeon to reach the treasure chest in its farthest room, then climb the ladder beside it straight back to the surface. If you die, your armor, bag, and arrows drop into a grave where you fell. Walk back and press F to recover them. Die again before you do, and the first grave is gone for good.
+You start in the walled village, where monsters can't reach you. Gear up, head into the wilderness, and find dungeons; there's about one every 50 tiles. The world is endless, and everything gets one level tougher every 50 tiles from the village. Clear a dungeon to reach the treasure chest in its farthest room, then climb the escape rope beside it straight back to the surface. If you die, your armor, bag, and arrows drop into a grave where you fell. Walk back and press F to recover them. Die again before you do, and the first grave is gone for good.
+
+Every 16 levels you'll hit a wall: monsters past it are much tougher than more levels can make up for. Bosses guard some dungeons from level 5 and drop runes. Apply runes to your gear at an Enchanting Table you build in the village, and that's how you break through.
 
 | Input | Action |
 |---|---|
@@ -20,11 +22,13 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 | Mouse | Aim |
 | Left click / Space (hold) | Attack |
 | 1 / 2 / 3 | Sword / Bow / Staff |
-| Hold Q | Potion wheel: point at a potion and release Q to drink it, or release in the middle to cancel |
+| Hold Q | Potion wheel: point at health, mana, or travel and release Q to use it; release in the middle to cancel. Scroll while pointing to pick which level of potion it uses |
 | I | Inventory: drag gear onto the stick figure to equip it |
 | C | Character sheet (spend stat points) |
 | M | Full-screen map of everywhere you've explored: scroll to zoom, drag to pan |
-| F | Interact: talk, open, enter, leave, recover |
+| F | Interact: talk, open, enter, descend, climb, recover |
+| Hold F | Chop a tree (axe) or mine a rock (pickaxe) |
+| B | Build menu (in the village): Enchanting Table, Potion Table |
 | Esc | Pause menu, or close the open panel |
 | ` (backtick) | Dev panel (local play, or add `?dev` to the URL) |
 
@@ -32,10 +36,17 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 |---|---|---|---|
 | Sword | STR × 1 | free | 90° cleave with 1.7-tile reach, knockback, 0.4 s |
 | Bow | floor(DEX × 1.5) | 1 arrow | 8-tile range, 0.6 s |
-| Staff | INT × 3 | 5 mana | 7-tile range, 0.8 s. Hits hard, but mana only regenerates in the village, so bring mana potions |
+| Staff | INT × 3 | 5 + 1.5 × INT mana | 7-tile range, 0.8 s. Hits hardest, but a full mana bar holds only about 6 casts, and mana only regenerates in the village |
 
-- **Zombies** have 10 HP and deal 2 damage. Watch for the red windup: stepping back before it ends dodges the hit. They can't enter the village.
-- **Leveling:** zombies give 10 XP plus a chance of gold and arrows. Each level needs `50 × level` XP and grants 3 stat points.
+- **Monsters** match the level of where they are: level 1 near the village, +1 every 50 tiles. A level 1 zombie has 10 HP and deals 2 damage; HP grows by half and damage by about a third of that per level, with a big jump at every wall (17, 33, 49, …). Watch for the red windup: stepping back before it ends dodges the hit. Monsters can't enter the village.
+- **Slimes** hop: green ones (tanky) from level 2, red (hit hard, fragile) from 3, blue from 4. They drop goop for brewing potions.
+- **Leveling:** a monster gives 10 XP × its level (more for slimes and bosses), less if it's below your level. Leveling gets steadily slower: each level needs `50 × level × 1.08^(level − 1)` XP and grants 3 stat points.
+- **Ranged weapons are a resource.** The sword is free; arrows cost 1.5 g × your level each, and mana comes from potions outside the village. Put points in Strength: a pure archer or mage won't get far.
+- **Dungeons** get more floors from level 4 (take the stairs down); each floor has at most two kinds of monster. Saving inside a dungeon resumes on the floor you were on. From level 5, a dungeon may have a **boss** in its treasure room (the first boss-level dungeon always does). Bosses drop runes, and higher-level bosses drop more of them. A chest opened after its boss dies holds twice the loot.
+- **Runes and enchanting:** each boss type drops its own rune (Centaur → Strength, Golem → Endurance, Giant Slime → Intellect, Giant Cat → Dexterity). At the Enchanting Table, a rune adds +3 to that stat on a piece of gear for 75 g × your level. A table of level N holds N runes per piece; upgrade it with more stone and wood. You can also convert 4 runes of one type into 1 of another (40 g × your level).
+- **Gathering:** buy an axe and pickaxe from the General Vendor, then hold F next to trees and rocks for 3–5 wood or stone each (in your pouch, not your bag). They grow back after a few minutes. Your Gathering skill levels as you harvest and gives a growing chance of a bonus harvest.
+- **Potions have levels.** A health potion of level N heals 25 + 10 × (N − 1); mana restores 25 × N. The Potion Vendor sells your level and the two below it; brew them cheaper at a Potion Table with goop. **Travel potions** take you to the village, or to a dungeon you've visited up to the potion's level.
+- **Enchanted gear is at risk:** when you die, an enchanted starter weapon goes into your grave like any other gear (plain starters stay with you).
 - **Weapons are items.** You start with a Starter Sword, Bow, and Staff equipped. A weapon you take off can't be used until you equip one again.
 - **Armor** reduces damage by `armor / (armor + 50)`. Leather and Iron sets are sold in the village; Steel only comes from dungeon chests.
 - **The village** has a Potion Vendor (NE), a General Vendor who also buys your loot (SW), a Respec Trainer (NW), and a Stash (SE). Anything in the stash is safe from death. Click or drag stacks between your bag and the stash, or use the separate "all items" and "all gold" buttons.
@@ -137,14 +148,30 @@ npm test
 Tests use Node's built-in test runner (Node 20+) and run automatically on every pull request through GitHub Actions. They cover:
 - **World:** deterministic generation that doesn't depend on chunk order, village layout, dungeon placement and reachability, the world border, collision
 - **Combat:** armor math, weapon damage and costs, sword reach, knockback and click buffering, projectiles
-- **Zombies:** AI states, windup timing, de-aggro, spawning and respawn timers
+- **Enemies:** AI states, windup timing, de-aggro, level scaling and walls, slimes hopping, bosses, drops and runes, spawning by level and respawn timers
 - **Progression:** XP and leveling, stat allocation, respec, drops, regen
 - **Items:** inventory stacking, equipment, potions, vendors, buyback, stash
-- **Dungeons:** layout, room populations, chest loot weights, enter/exit, loot persistence and overflow
-- **Death and saving:** graves and the one-grave rule, save round-trips, migrations, validation, export/import, save slots
+- **Dungeons:** every floor of every nearby dungeon (stairs, treasure room, enemy mix), chest loot weights and boss bonus, enter/exit, floors, the first boss, loot persistence and overflow
+- **Death and saving:** graves and the one-grave rule, save round-trips (including floors, pouch, runes, structures), migrations through v4, validation, export/import, save slots
+- **Crafting:** gathering and regrowth, village structures (placement rules, building, moving, upgrading), enchanting and rune conversion, brewing, enchanted gear on death, travel potions
 - **Accounts:** sign-up outcomes, including a taken username or an email that already has an account
 - **Cloud sync:** per-account slots, offline saves, two-device hand-off, conflicts and their resolution, deletes, pushes racing new saves (against an in-memory fake of the cloud)
 - **Maps and tools:** fog of war, the map window, dungeon lookup, dev panel actions
+
+## Balance simulation
+
+[tools/balance.js](tools/balance.js) plays each build (warrior, berserker, spellblade, skirmisher, archer, mage, balanced) from level 1, dungeon by dungeon. It uses the game's real damage, HP, and armor formulas, plus proposed numbers for enemy scaling, XP, gold, arrows and mana, gathering, the enchanting table, and runes. It shows where each build hits a plateau (a "wall" every 16 levels), and how many bosses, dungeons, and hours it takes to break through. The design it tunes is in [designDocs/progression-and-crafting.md](designDocs/progression-and-crafting.md).
+
+```bash
+npm run balance
+```
+
+- `-- --build mage` shows one build's level-by-level table (default: warrior).
+- `-- --solve` fits the wall heights so a warrior needs about 4 bosses at the first wall and 10 at later ones.
+- `-- --set xpCurve=1.15 --set runeBonus=2` tries numbers without editing the file.
+- `-- --csv balance.csv` writes every build and level to a spreadsheet.
+
+The proposed numbers live in the `P` block at the top of the file. It's a planning tool: nothing in the game reads it.
 
 ## Project layout
 
@@ -163,6 +190,7 @@ js/
   ui/             HUD, panels (character, inventory, vendors, stash, chest, trainer, pause, map), title, quick wheel, minimap, dev panel, tooltips, toasts
   render.js       canvas drawing
 tests/            node:test suites
+tools/            balance simulation (npm run balance)
 supabase/         database migrations (run in the Supabase SQL Editor) and a verification query
 designDocs/       design docs
 .github/          CI workflow and issue templates
@@ -179,8 +207,9 @@ designDocs/       design docs
 | M5 | Dungeons | ✅ Done |
 | M6 | Persistence + death | ✅ Done |
 | M7 | Maps + polish (minimap, fog of war, dev panel) | ✅ Done |
-| M8 | Accounts + cloud saves (Supabase) | 🚧 In review |
+| M8 | Accounts + cloud saves (Supabase) | ✅ Done |
+| M9 | Endless world, monsters and scaling, bosses and runes, enchanting, gathering, potion levels and brewing, multi-floor dungeons | 🚧 In review |
 
-### Endless world later
+### The endless world
 
-Generation is a pure function of `(seed, x, y)`, built per 32×32 chunk. The fixed 400×400 size is enforced only in `js/world/bounds.js`, so making that check always pass gives an endless world. Saves already key dungeon state by coordinates, so they need no change.
+Generation is a pure function of `(seed, x, y)`, built per 32×32 chunk as you explore, in every direction (negative coordinates too). Saves store only what you changed: explored fog, dungeon state, harvested trees and rocks (until they regrow), and village structures.

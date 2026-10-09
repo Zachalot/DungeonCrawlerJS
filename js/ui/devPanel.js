@@ -73,7 +73,23 @@ export class DevPanel {
         this.status = "Map revealed";
         break;
       case "kill":
-        this.status = `Killed ${dev.killNearby(game)} zombies`;
+        this.status = `Killed ${dev.killNearby(game)} enemies`;
+        break;
+      case "deeper": {
+        const level = dev.teleportToDeeperDungeon(game);
+        this.status = level ? `Teleported to a level ${level} dungeon` : "No deeper dungeon found";
+        break;
+      }
+      case "materials":
+        dev.addMaterials(game);
+        this.status = "+100 wood and stone, +20 of each goop";
+        break;
+      case "runes":
+        dev.addRunes(game);
+        this.status = "+5 of every rune";
+        break;
+      case "tools":
+        this.status = dev.addTools(game) ? "Axe and pickaxe added" : "You already have both (or your bag is full)";
         break;
       case "save":
         this.saveJson = JSON.stringify(serializeGame(game), null, 2);
@@ -98,11 +114,15 @@ export class DevPanel {
         <button class="btn small" data-dev="level">Level up</button>
         <button class="btn small" data-dev="village">To village</button>
         <button class="btn small" data-dev="dungeon">To nearest dungeon</button>
+        <button class="btn small" data-dev="deeper">To deeper dungeon</button>
         <button class="btn small" data-dev="grave">To grave</button>
         <button class="btn small toggle${on("godMode")}" data-dev="god">God mode</button>
         <button class="btn small toggle${on("showHitboxes")}" data-dev="hitboxes">Hitboxes</button>
         <button class="btn small" data-dev="reveal">Reveal map</button>
         <button class="btn small" data-dev="kill">Kill nearby</button>
+        <button class="btn small" data-dev="materials">+Materials</button>
+        <button class="btn small" data-dev="runes">+Runes</button>
+        <button class="btn small" data-dev="tools">Axe + pickaxe</button>
         <button class="btn small" data-dev="save">Print save JSON</button>
         <button class="btn small" data-dev="close">Close</button>
       </div>

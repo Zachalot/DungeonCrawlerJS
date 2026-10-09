@@ -1,5 +1,7 @@
 import { CHUNK_SIZE, TILE_SIZE } from "./config.js";
+import { STRUCTURES } from "./data/structures.js";
 import { WEAPONS } from "./data/weapons.js";
+import { hasTool } from "./systems/gathering.js";
 import { Tile } from "./world/tiles.js";
 import { VILLAGE_CENTER_TILE, VILLAGE_NPCS, VILLAGE_ORIGIN } from "./world/village.js";
 
@@ -17,7 +19,6 @@ const COLORS = {
   trunk: "#5a3d22",
   canopy: "#2f6b2a",
   canopyLight: "#3d7f35",
-  border: "#1f4a1c",
   entranceStone: "#5b5b63",
   entranceHole: "#141418",
   player: "#3b82f6",
@@ -26,8 +27,6 @@ const COLORS = {
   label: "#f8fafc",
   labelShadow: "rgba(0, 0, 0, 0.75)",
   shadow: "rgba(0, 0, 0, 0.25)",
-  zombie: "#6b8f5e",
-  zombieOutline: "#2f4a28",
   zombieWindup: "#c2563f",
   zombieEyes: "#fde047",
   hpBack: "rgba(0, 0, 0, 0.6)",
@@ -58,8 +57,20 @@ const COLORS = {
   tombstoneEdge: "#4b5563",
   dirt: "#5b4636",
   graveArrow: "#e5e7eb",
-  ladderWood: "#a16207",
+  rope: "#d6b37a",
+  ropeKnot: "#8b6b3e",
   daylight: "rgba(254, 243, 199, 0.45)",
+  stairs: "#6b6560",
+  stairsDark: "#2a2622",
+  bossCrown: "#facc15",
+  tableWood: "#7c4a21",
+  tableTop: "#a16207",
+  runeGlow: "#a78bfa",
+  cauldron: "#334155",
+  brew: "#22c55e",
+  harvestRing: "#fde68a",
+  placeOk: "rgba(74, 222, 128, 0.45)",
+  placeBad: "rgba(248, 113, 113, 0.45)",
 };
 
 /** Draws every tile intersecting the camera view. */
@@ -109,22 +120,27 @@ export function drawLabels(ctx, game, camera) {
   drawLabel(ctx, "Village (safe zone)", VILLAGE_CENTER_TILE * T - camera.x, VILLAGE_ORIGIN * T - camera.y - 6);
 }
 
-/** Draws the player, zombies, NPCs and chests, sorted by y so lower sprites overlap higher ones. */
+/** Draws the player, enemies, NPCs, structures and chests, sorted by y so lower sprites overlap higher ones. */
 export function drawEntities(ctx, game, alpha, camera) {
   const drawables = [
     { y: game.player.y, draw: () => drawPlayer(ctx, game.player, alpha, camera) },
-    ...game.zombies.map((z) => ({ y: z.y, draw: () => drawZombie(ctx, z, alpha, camera) })),
+    ...game.enemies.map((e) => ({ y: e.y, draw: () => drawEnemy(ctx, e, alpha, camera) })),
   ];
   if (game.inDungeon) {
-    const { chest, ladder } = game.area;
-    drawLadder(ctx, ladder.tx * T - camera.x, ladder.ty * T - camera.y);
-    const opened = game.dungeonStatus(game.area.id).chest !== null;
-    drawables.push({
-      y: (chest.ty + 0.5) * T,
-      draw: () => drawChest(ctx, (chest.tx + 0.5) * T - camera.x, (chest.ty + 0.5) * T - camera.y, COLORS.treasure, opened),
-    });
+    const { chest, rope } = game.area;
+    if (rope) drawRope(ctx, rope.tx * T - camera.x, rope.ty * T - camera.y);
+    if (chest) {
+      const opened = game.dungeonStatus(game.area.id).chest !== null;
+      drawables.push({
+        y: (chest.ty + 0.5) * T,
+        draw: () => drawChest(ctx, (chest.tx + 0.5) * T - camera.x, (chest.ty + 0.5) * T - camera.y, COLORS.treasure, opened),
+      });
+    }
   } else {
     drawables.push(...VILLAGE_NPCS.map((npc) => ({ y: (npc.ty + 0.5) * T, draw: () => drawNpc(ctx, npc, camera) })));
+    for (const s of game.structures) {
+      drawables.push({ y: (s.ty + 0.5) * T, draw: () => drawStructure(ctx, s.kind, s.tx * T - camera.x, s.ty * T - camera.y, s.level) });
+    }
     if (game.grave) {
       const { x, y } = game.grave;
       drawables.push({ y, draw: () => drawGrave(ctx, x - camera.x, y - camera.y) });
@@ -237,30 +253,66 @@ function drawPlayer(ctx, player, alpha, camera) {
   ctx.globalAlpha = 1;
 }
 
-function drawZombie(ctx, zombie, alpha, camera) {
-  const pos = zombie.renderPosition(alpha);
+function drawEnemy(ctx, enemy, alpha, camera) {
+  const pos = enemy.renderPosition(alpha);
   const sx = pos.x - camera.x;
   const sy = pos.y - camera.y;
-  const winding = zombie.state === "windup";
-  const r = zombie.half * (winding ? 1.12 : 1);
+  const { def } = enemy;
+  if (def.movement === "hop") drawSlime(ctx, enemy, sx, sy);
+  else drawWalker(ctx, enemy, sx, sy);
 
-  drawShadow(ctx, sx, sy, zombie.half);
+  const barWidth = def.boss ? 64 : enemy.half * 2;
+  const barY = sy - enemy.half - 10;
+  if (def.boss) {
+    drawCrown(ctx, sx, barY - 6);
+    ctx.font = "bold 11px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    drawLabel(ctx, `${def.name} · Lv ${def.level}`, sx, barY - 14, COLORS.bossCrown);
+  }
+  if (enemy.hp < def.hp || def.boss) {
+    ctx.fillStyle = COLORS.hpBack;
+    ctx.fillRect(sx - barWidth / 2, barY, barWidth, 4);
+    ctx.fillStyle = COLORS.hpFill;
+    ctx.fillRect(sx - barWidth / 2, barY, barWidth * Math.max(0, enemy.hp / def.hp), 4);
+  }
+}
 
-  // Arms reach toward the facing direction, further during the windup telegraph.
+function drawCrown(ctx, x, y) {
+  ctx.fillStyle = COLORS.bossCrown;
+  ctx.beginPath();
+  ctx.moveTo(x - 9, y + 4);
+  ctx.lineTo(x - 9, y - 4);
+  ctx.lineTo(x - 4, y);
+  ctx.lineTo(x, y - 7);
+  ctx.lineTo(x + 4, y);
+  ctx.lineTo(x + 9, y - 4);
+  ctx.lineTo(x + 9, y + 4);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Zombies and walking bosses: a round body with arms that reach out during the windup.
+function drawWalker(ctx, enemy, sx, sy) {
+  const winding = enemy.state === "windup";
+  const r = enemy.half * (winding ? 1.12 : 1);
+  const outline = shade(enemy.def.color);
+  drawShadow(ctx, sx, sy, enemy.half);
+
   const reach = winding ? r + 8 : r + 3;
-  ctx.strokeStyle = COLORS.zombieOutline;
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = enemy.def.boss ? 6 : 4;
   for (const side of [-0.5, 0.5]) {
-    const ax = sx + Math.cos(zombie.facing + side) * (r - 2);
-    const ay = sy + Math.sin(zombie.facing + side) * (r - 2);
+    const ax = sx + Math.cos(enemy.facing + side) * (r - 2);
+    const ay = sy + Math.sin(enemy.facing + side) * (r - 2);
     ctx.beginPath();
     ctx.moveTo(ax, ay);
-    ctx.lineTo(ax + Math.cos(zombie.facing) * (reach - r + 4), ay + Math.sin(zombie.facing) * (reach - r + 4));
+    ctx.lineTo(ax + Math.cos(enemy.facing) * (reach - r + 4), ay + Math.sin(enemy.facing) * (reach - r + 4));
     ctx.stroke();
   }
 
-  ctx.fillStyle = zombie.flash > 0 ? COLORS.flash : winding ? COLORS.zombieWindup : COLORS.zombie;
-  ctx.strokeStyle = COLORS.zombieOutline;
+  ctx.fillStyle = enemy.flash > 0 ? COLORS.flash : winding ? COLORS.zombieWindup : enemy.def.color;
+  ctx.strokeStyle = outline;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(sx, sy, r, 0, Math.PI * 2);
@@ -270,29 +322,56 @@ function drawZombie(ctx, zombie, alpha, camera) {
   ctx.fillStyle = COLORS.zombieEyes;
   for (const side of [-0.45, 0.45]) {
     ctx.beginPath();
-    ctx.arc(sx + Math.cos(zombie.facing + side) * r * 0.55, sy + Math.sin(zombie.facing + side) * r * 0.55, 2, 0, Math.PI * 2);
+    ctx.arc(sx + Math.cos(enemy.facing + side) * r * 0.55, sy + Math.sin(enemy.facing + side) * r * 0.55, enemy.def.boss ? 3 : 2, 0, Math.PI * 2);
     ctx.fill();
-  }
-
-  if (zombie.hp < zombie.def.hp) {
-    const width = zombie.half * 2;
-    const x = sx - zombie.half;
-    const y = sy - zombie.half - 8;
-    ctx.fillStyle = COLORS.hpBack;
-    ctx.fillRect(x, y, width, 4);
-    ctx.fillStyle = COLORS.hpFill;
-    ctx.fillRect(x, y, width * Math.max(0, zombie.hp / zombie.def.hp), 4);
   }
 }
 
-/** Names over NPCs and dungeon fixtures, plus an "[F] …" prompt over the one in interact range. */
+// Slimes: a squashy blob that lifts off the ground mid-hop and turns red while winding up.
+function drawSlime(ctx, enemy, sx, sy) {
+  const winding = enemy.state === "windup";
+  const lift = enemy.hopLift * enemy.half * 0.9;
+  const squash = enemy.airborne ? 0.92 : 1.12;
+  const r = enemy.half * (winding ? 1.12 : 1);
+  drawShadow(ctx, sx, sy, enemy.half * (1 - enemy.hopLift * 0.3));
+  ctx.fillStyle = enemy.flash > 0 ? COLORS.flash : winding ? COLORS.zombieWindup : enemy.def.color;
+  ctx.strokeStyle = shade(enemy.def.color);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy - lift + r * 0.15, r * squash, (r / squash) * 0.85, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(sx - r * 0.35, sy - lift - r * 0.2, r * 0.25, r * 0.15, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111827";
+  for (const side of [-0.4, 0.4]) {
+    ctx.beginPath();
+    ctx.arc(sx + Math.cos(enemy.facing + side) * r * 0.45, sy - lift + Math.sin(enemy.facing + side) * r * 0.3, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// A darker outline for any body color ("#rrggbb").
+function shade(hex) {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const dim = (c) => Math.floor(c * 0.45);
+  return `rgb(${dim(n >> 16)}, ${dim((n >> 8) & 255)}, ${dim(n & 255)})`;
+}
+
+/**
+ * Names over NPCs, structures, and dungeon fixtures, plus an "[F] …" prompt over the one in
+ * interact range. With nothing in range: a "[Hold F]" prompt over a tree or rock within reach,
+ * and a progress ring while it's being harvested.
+ */
 export function drawInteractions(ctx, game, camera) {
   const nearby = game.nearbyInteractable();
   ctx.font = "bold 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   for (const it of game.interactables()) {
-    const x = (it.tx + 0.5) * T - camera.x;
+    const x = (it.tx + (it.w ?? 1) / 2) * T - camera.x;
     const y = it.ty * T - camera.y - (it.kind === "entrance" ? 18 : 2);
     if (it.kind !== "entrance") drawLabel(ctx, it.name, x, y);
     if (nearby && it.kind === nearby.kind && it.tx === nearby.tx && it.ty === nearby.ty) {
@@ -300,6 +379,48 @@ export function drawInteractions(ctx, game, camera) {
       ctx.fillText(it.prompt, x, y - 14);
     }
   }
+  if (nearby) return;
+  const target = game.nearbyNode();
+  if (!target) return;
+  const x = (target.tx + 0.5) * T - camera.x;
+  const y = (target.ty + 0.5) * T - camera.y;
+  const h = game.harvesting;
+  if (h && h.tx === target.tx && h.ty === target.ty) {
+    ctx.strokeStyle = COLORS.labelShadow;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(x, y, 14, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = COLORS.harvestRing;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 14, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * h.progress);
+    ctx.stroke();
+    return;
+  }
+  const { tool } = target.node;
+  const ready = hasTool(game.player.inventory, tool);
+  ctx.fillStyle = ready ? COLORS.prompt : COLORS.labelDim;
+  const text = ready ? `[Hold F] ${tool === "axe" ? "Chop tree" : "Mine rock"}` : `Needs ${tool === "axe" ? "an axe" : "a pickaxe"}`;
+  ctx.fillText(text, x, y - T / 2 - 4);
+}
+
+/** Ghost of a structure being placed at `tile`: green where it fits, red where it doesn't. */
+export function drawPlacement(ctx, game, placing, tile, camera) {
+  if (!placing || !tile) return;
+  const { w, h } = STRUCTURES[placing.kind];
+  const existing = game.structure(placing.kind);
+  const ok = game.canPlace(placing.kind, tile.tx, tile.ty, existing);
+  ctx.fillStyle = ok ? COLORS.placeOk : COLORS.placeBad;
+  ctx.fillRect(tile.tx * T - camera.x, tile.ty * T - camera.y, w * T, h * T);
+  ctx.globalAlpha = 0.7;
+  drawStructure(ctx, placing.kind, tile.tx * T - camera.x, tile.ty * T - camera.y, existing?.level ?? 1);
+  ctx.globalAlpha = 1;
+  ctx.font = "bold 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  const text = ok ? "Click to place · Esc to cancel" : "Doesn't fit here · Esc to cancel";
+  drawLabel(ctx, text, (tile.tx + w / 2) * T - camera.x, tile.ty * T - camera.y - 4, ok ? COLORS.label : COLORS.zombieWindup);
 }
 
 /** Arrow at the screen edge pointing to an off-screen grave, with its distance in tiles. */
@@ -346,7 +467,7 @@ export function drawGraveArrow(ctx, game, alpha, camera) {
 }
 
 /**
- * Dev overlay: collision boxes for the player and zombies, zombie aggro (yellow) and attack
+ * Dev overlay: collision boxes for the player and enemies, enemy aggro (yellow) and attack
  * (red) radii, the sword's reach, and projectile radii.
  */
 export function drawHitboxes(ctx, game, alpha, camera) {
@@ -365,7 +486,7 @@ export function drawHitboxes(ctx, game, alpha, camera) {
   const p = game.player.renderPosition(alpha);
   box(p.x, p.y, game.player.half, "#38bdf8");
   circle(p.x, p.y, WEAPONS.sword.range * T, "rgba(56, 189, 248, 0.5)");
-  for (const z of game.zombies) {
+  for (const z of game.enemies) {
     const pos = z.renderPosition(alpha);
     box(pos.x, pos.y, z.half, "#4ade80");
     circle(pos.x, pos.y, z.def.aggroRadius * T, "rgba(250, 204, 21, 0.35)");
@@ -413,18 +534,58 @@ function drawNpc(ctx, npc, camera) {
   ctx.fill();
 }
 
-/** A ladder in a shaft of daylight, filling the tile whose top-left is (x, y). */
-function drawLadder(ctx, x, y) {
+/** An escape rope hanging in a shaft of daylight, filling the tile whose top-left is (x, y). */
+function drawRope(ctx, x, y) {
   const light = ctx.createRadialGradient(x + T / 2, y + T / 2, 2, x + T / 2, y + T / 2, T);
   light.addColorStop(0, COLORS.daylight);
   light.addColorStop(1, "rgba(254, 243, 199, 0)");
   ctx.fillStyle = light;
   ctx.fillRect(x - T / 2, y - T / 2, T * 2, T * 2);
 
-  ctx.fillStyle = COLORS.ladderWood;
-  ctx.fillRect(x + 8, y - 6, 3, T + 4);
-  ctx.fillRect(x + T - 11, y - 6, 3, T + 4);
-  for (let rung = 0; rung < 4; rung++) ctx.fillRect(x + 8, y - 2 + rung * 8, T - 16, 2);
+  ctx.strokeStyle = COLORS.rope;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + T / 2, y - 10);
+  ctx.bezierCurveTo(x + T / 2 + 4, y + 6, x + T / 2 - 4, y + 14, x + T / 2, y + T - 4);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.ropeKnot;
+  for (const ky of [4, 14, 24]) ctx.fillRect(x + T / 2 - 3, y + ky, 6, 3);
+}
+
+/** A placed village structure with its top-left at (x, y). The enchanting table shows a rune stone per level. */
+function drawStructure(ctx, kind, x, y, level) {
+  const { w } = STRUCTURES[kind];
+  drawShadow(ctx, x + (w * T) / 2, y + T / 2 + 2, (w * T) / 2 - 2);
+  if (kind === "enchantingTable") {
+    ctx.fillStyle = COLORS.tableWood;
+    ctx.fillRect(x + 4, y + 18, 5, 12);
+    ctx.fillRect(x + w * T - 9, y + 18, 5, 12);
+    ctx.fillStyle = COLORS.tableTop;
+    ctx.fillRect(x + 2, y + 8, w * T - 4, 12);
+    ctx.strokeStyle = COLORS.chestTrim;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 2, y + 8, w * T - 4, 12);
+    ctx.fillStyle = COLORS.runeGlow;
+    for (let i = 0; i < Math.min(4, level); i++) {
+      ctx.beginPath();
+      ctx.arc(x + 14 + i * 12, y + 14, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+  ctx.fillStyle = COLORS.cauldron;
+  ctx.beginPath();
+  ctx.ellipse(x + T / 2, y + T / 2 + 4, 12, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = COLORS.brew;
+  ctx.beginPath();
+  ctx.ellipse(x + T / 2, y + T / 2 - 2, 10, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(187, 247, 208, 0.8)";
+  ctx.beginPath();
+  ctx.arc(x + T / 2 - 3, y + T / 2 - 8, 2.5, 0, Math.PI * 2);
+  ctx.arc(x + T / 2 + 4, y + T / 2 - 12, 2, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawGrave(ctx, sx, sy) {
@@ -497,10 +658,6 @@ function drawTile(ctx, tile, variant, x, y) {
       fill(ctx, pick(COLORS.grass, variant), x, y);
       drawTree(ctx, x, y, COLORS.canopy, COLORS.canopyLight);
       break;
-    case Tile.BORDER:
-      fill(ctx, COLORS.border, x, y);
-      drawTree(ctx, x, y, COLORS.border, COLORS.canopy);
-      break;
     case Tile.DUNGEON_ENTRANCE:
       fill(ctx, pick(COLORS.grass, variant), x, y);
       drawEntrance(ctx, x, y);
@@ -523,6 +680,11 @@ function drawTile(ctx, tile, variant, x, y) {
     case Tile.EXIT_PORTAL:
       fill(ctx, pick(COLORS.dungeonFloor, variant), x, y);
       drawPortal(ctx, x, y);
+      break;
+    case Tile.STAIRS_DOWN:
+    case Tile.STAIRS_UP:
+      fill(ctx, pick(COLORS.dungeonFloor, variant), x, y);
+      drawStairs(ctx, x, y, tile === Tile.STAIRS_DOWN);
       break;
     default:
       fill(ctx, pick(COLORS.grass, variant), x, y);
@@ -583,6 +745,17 @@ function drawEntrance(ctx, x, y) {
   ctx.fillRect(x + 7, y + 9, T - 14, T - 13);
   ctx.fillStyle = COLORS.entranceStone;
   for (let i = 0; i < 3; i++) ctx.fillRect(x + 9 + i * 2, y + 13 + i * 5, T - 18 - i * 4, 2);
+}
+
+// Steps going down (darkening into the hole) or up (lighter toward the top).
+function drawStairs(ctx, x, y, down) {
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = down ? `rgba(20, 18, 16, ${0.25 + i * 0.2})` : `rgba(150, 140, 130, ${0.9 - i * 0.18})`;
+    ctx.fillRect(x + 3 + i * 2, y + 4 + i * 6, T - 6 - i * 4, 6);
+  }
+  ctx.strokeStyle = COLORS.stairsDark;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 3, y + 4, T - 6, T - 8);
 }
 
 function drawPortal(ctx, x, y) {

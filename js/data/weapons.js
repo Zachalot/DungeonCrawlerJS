@@ -33,11 +33,13 @@ export const WEAPONS = Object.freeze({
     key: "Digit3",
     stat: "int",
     multiplier: 3, // high damage, paid for in mana: there's no mana regen outside the village
-
     cooldown: 0.8,
     kind: "projectile",
     projectile: "fireball",
+    // A cast costs manaCost + manaCostPerInt × INT, so a full bar (10 × INT) holds about 6
+    // casts however much INT you have: more INT means harder hits, not more of them.
     manaCost: 5,
+    manaCostPerInt: 1.5,
     range: 7,
     projectileSpeed: 10,
     projectileRadius: 6,
