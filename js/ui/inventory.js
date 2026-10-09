@@ -1,4 +1,5 @@
-import { ARMOR_SLOTS, ITEMS, SLOT_NAMES } from "../data/items.js";
+import { EQUIP_SLOTS, ITEMS, SLOT_NAMES } from "../data/items.js";
+import { isEquippable } from "../systems/inventory.js";
 import { armorSummary, itemIcon, slotGrid } from "./items.js";
 import { Panel } from "./panel.js";
 
@@ -14,8 +15,8 @@ export class InventoryPanel extends Panel {
     if (action === "use") {
       const instance = game.player.inventory[Number(index)];
       const def = instance && ITEMS[instance.defId];
-      if (def?.type === "armor") game.equip(Number(index));
-      else if (def?.type === "consumable") game.drinkPotion(def.resource);
+      if (def && isEquippable(def)) game.equip(Number(index));
+      else if (def?.type === "consumable") game.drinkPotion(def.id);
     } else if (action === "unequip") {
       game.unequip(slot);
     } else if (action === "close") {
@@ -26,7 +27,7 @@ export class InventoryPanel extends Panel {
 
   render() {
     const { player } = this.game;
-    const doll = ARMOR_SLOTS.map((slot) => {
+    const doll = EQUIP_SLOTS.map((slot) => {
       const equipped = player.equipment[slot];
       return `<div class="doll-slot">
         ${equipped ? itemIcon(equipped.defId, 1, `data-action="unequip" data-slot="${slot}" data-hint="Click to take off"`) : `<div class="item-icon empty"></div>`}
@@ -44,7 +45,7 @@ export class InventoryPanel extends Panel {
         </div>
         <div>
           <h3>Bag</h3>
-          ${slotGrid(player.inventory, (i) => `data-action="use" data-index="${i}" data-hint="${ITEMS[player.inventory[i].defId].type === "armor" ? "Click to equip" : "Click to drink"}"`)}
+          ${slotGrid(player.inventory, (i) => `data-action="use" data-index="${i}" data-hint="${isEquippable(ITEMS[player.inventory[i].defId]) ? "Click to equip" : "Click to drink"}"`)}
           <p class="dim small">Click armor to equip it, a potion to drink it, or equipped armor to take it off.</p>
         </div>
       </div>

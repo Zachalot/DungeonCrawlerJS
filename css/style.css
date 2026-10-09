@@ -461,6 +461,20 @@ body {
   box-shadow: 0 0 6px rgba(125, 211, 252, 0.35);
 }
 
+.item-icon.tier-starter {
+  border-color: #78716c;
+  color: #d6d3d1;
+  font-size: 13px;
+}
+
+.tier-text-starter {
+  color: #d6d3d1;
+}
+
+.weapon-slot.unequipped {
+  opacity: 0.55;
+}
+
 .item-icon.res-hp {
   color: #f87171;
 }

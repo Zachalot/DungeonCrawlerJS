@@ -14,10 +14,13 @@ export const VENDORS = Object.freeze({
   },
   generalVendor: {
     name: "General Vendor",
-    greeting: "Armor, arrows, and I'll buy whatever you drag back.",
+    greeting: "Armor, arrows, spare starter weapons, and I'll buy whatever you drag back.",
     buys: true,
     stock: [
       { arrows: 20, price: 10 },
+      { item: "starter_sword" },
+      { item: "starter_bow" },
+      { item: "starter_staff" },
       { item: "leather_helmet" },
       { item: "leather_chest" },
       { item: "leather_legs" },

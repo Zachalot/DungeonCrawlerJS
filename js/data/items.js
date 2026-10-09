@@ -1,7 +1,10 @@
 // Item definitions. Instances in inventories are { uid, defId, qty }; only instances are saved.
-// sellPrice is always floor(buyPrice × 0.5).
+// sellPrice is floor(buyPrice × 0.5) unless an item overrides it.
 
 export const ARMOR_SLOTS = Object.freeze(["helmet", "chest", "legs", "gloves", "boots"]);
+/** Weapon slots share ids with the weapon kinds in data/weapons.js. */
+export const WEAPON_SLOTS = Object.freeze(["sword", "bow", "staff"]);
+export const EQUIP_SLOTS = Object.freeze([...ARMOR_SLOTS, ...WEAPON_SLOTS]);
 
 export const SLOT_NAMES = Object.freeze({
   helmet: "Helmet",
@@ -9,6 +12,9 @@ export const SLOT_NAMES = Object.freeze({
   legs: "Legs",
   gloves: "Gloves",
   boots: "Boots",
+  sword: "Sword",
+  bow: "Bow",
+  staff: "Staff",
 });
 
 const TIERS = {
@@ -50,13 +56,22 @@ function item(fields) {
     slot: null,
     tier: null,
     armor: 0,
-    weaponBonus: 0, // reserved for weapon tiers
+    weaponBonus: 0, // flat damage added to a weapon's stat-based damage
     stats: {}, // reserved for secondary bonuses, e.g. { end: 1 }
     stackable: false,
     maxStack: 1,
-    ...fields,
     sellPrice: Math.floor(fields.buyPrice * 0.5),
+    ...fields,
   });
+}
+
+/**
+ * A weapon for one of the three weapon slots. Damage is the slot's stat formula
+ * (data/weapons.js) plus weaponBonus. Starter weapons sell for nothing, so dying
+ * (which hands out fresh ones) can't be farmed for gold.
+ */
+function weapon(id, name, slot, { tier, weaponBonus = 0, buyPrice, sellPrice }) {
+  return item({ id, name, type: "weapon", tier, slot, weaponBonus, buyPrice, ...(sellPrice === undefined ? {} : { sellPrice }) });
 }
 
 function potion(id, name, resource, effect, buyPrice) {
@@ -65,17 +80,26 @@ function potion(id, name, resource, effect, buyPrice) {
 
 export const ITEMS = Object.freeze({
   ...armorItems(),
+  starter_sword: weapon("starter_sword", "Starter Sword", "sword", { tier: "starter", buyPrice: 5, sellPrice: 0 }),
+  starter_bow: weapon("starter_bow", "Starter Bow", "bow", { tier: "starter", buyPrice: 5, sellPrice: 0 }),
+  starter_staff: weapon("starter_staff", "Starter Staff", "staff", { tier: "starter", buyPrice: 5, sellPrice: 0 }),
   minor_hp_potion: potion("minor_hp_potion", "Minor Health Potion", "hp", { flat: 25 }, 10),
   minor_mana_potion: potion("minor_mana_potion", "Minor Mana Potion", "mana", { flat: 25 }, 10),
   greater_hp_potion: potion("greater_hp_potion", "Greater Health Potion", "hp", { percent: 0.4 }, 40),
   greater_mana_potion: potion("greater_mana_potion", "Greater Mana Potion", "mana", { percent: 0.4 }, 40),
 });
 
-/** Potions Q/E drink, best first. */
+/** Potions grouped by resource, best first. */
 export const POTION_PRIORITY = Object.freeze({
   hp: ["greater_hp_potion", "minor_hp_potion"],
   mana: ["greater_mana_potion", "minor_mana_potion"],
 });
+
+/** Quick-select wheel segments, clockwise from the top. */
+export const QUICK_WHEEL_ITEMS = Object.freeze(["minor_hp_potion", "greater_hp_potion", "greater_mana_potion", "minor_mana_potion"]);
+
+/** Weapons a new character starts with equipped, and is re-armed with after dying. */
+export const STARTER_WEAPONS = Object.freeze({ sword: "starter_sword", bow: "starter_bow", staff: "starter_staff" });
 
 export const STARTING_ITEMS = Object.freeze([
   { defId: "minor_hp_potion", qty: 2 },

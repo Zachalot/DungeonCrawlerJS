@@ -7,7 +7,7 @@ import { BUYBACK_SIZE, VENDORS } from "../js/data/vendors.js";
 import { Player } from "../js/entities/player.js";
 import { Game } from "../js/game.js";
 import { mulberry32 } from "../js/rng.js";
-import { drinkBestPotion } from "../js/systems/consumables.js";
+import { drinkPotion } from "../js/systems/consumables.js";
 import { buyEntry, repurchase, sellFromSlot } from "../js/systems/economy.js";
 import {
   addItem,
@@ -29,8 +29,10 @@ function bag(size = 4) {
 }
 
 describe("item data", () => {
-  it("prices every item to sell at half (floored)", () => {
-    for (const def of Object.values(ITEMS)) assert.equal(def.sellPrice, Math.floor(def.buyPrice / 2), def.id);
+  it("prices every item to sell at half (floored), except free starter weapons", () => {
+    for (const def of Object.values(ITEMS)) {
+      assert.equal(def.sellPrice, def.tier === "starter" ? 0 : Math.floor(def.buyPrice / 2), def.id);
+    }
   });
 
   it("matches the design doc's full-set armor totals", () => {
@@ -118,29 +120,29 @@ describe("potions", () => {
     return player;
   }
 
-  it("drinks the greater potion first and restores 40% of max, floored", () => {
+  it("drinks exactly the chosen type; greater restores 40% of max, floored", () => {
     const player = hurtPlayer();
     player.stats.end = 7; // 70 max HP → 28
-    const result = drinkBestPotion(player, "hp");
-    assert.deepEqual([result.defId, result.restored, player.hp], ["greater_hp_potion", 28, 38]);
+    const result = drinkPotion(player, "greater_hp_potion");
+    assert.deepEqual([result.restored, player.hp], [28, 38]);
+    assert.deepEqual([countItem(player.inventory, "greater_hp_potion"), countItem(player.inventory, "minor_hp_potion")], [0, 2]);
   });
 
   it("shares a 1 s cooldown, skips at full, and reports when there are none", () => {
     const player = hurtPlayer();
-    drinkBestPotion(player, "hp");
-    assert.equal(drinkBestPotion(player, "hp").reason, "cooldown");
+    drinkPotion(player, "minor_hp_potion");
+    assert.equal(drinkPotion(player, "greater_hp_potion").reason, "cooldown");
     player.potionCooldown = 0;
     player.hp = 50;
-    assert.equal(drinkBestPotion(player, "hp").reason, "full");
+    assert.equal(drinkPotion(player, "minor_hp_potion").reason, "full");
     player.mana = 0;
-    assert.equal(drinkBestPotion(player, "mana").reason, "none");
+    assert.equal(drinkPotion(player, "minor_mana_potion").reason, "none");
   });
 
   it("caps flat potions at max", () => {
     const player = hurtPlayer();
-    takeItem(player.inventory, "greater_hp_potion", 1);
     player.hp = 40;
-    assert.equal(drinkBestPotion(player, "hp").restored, 10);
+    assert.equal(drinkPotion(player, "minor_hp_potion").restored, 10);
   });
 });
 

@@ -11,12 +11,13 @@ const STAT_INFO = {
   end: { name: "Endurance", effect: "Max HP ×10" },
 };
 
+// `e` is the player's equipment, so weapon rows include the equipped weapon's bonus.
 const DERIVED = [
   { label: "Max HP", value: (s) => maxHp(s) },
   { label: "Max Mana", value: (s) => maxMana(s) },
-  { label: "Sword damage", value: (s) => weaponDamage(WEAPONS.sword, s) },
-  { label: "Arrow damage", value: (s) => weaponDamage(WEAPONS.bow, s) },
-  { label: "Fireball damage", value: (s) => weaponDamage(WEAPONS.staff, s) },
+  { label: "Sword damage", value: (s, e) => weaponDamage(WEAPONS.sword, s, e.sword) },
+  { label: "Arrow damage", value: (s, e) => weaponDamage(WEAPONS.bow, s, e.bow) },
+  { label: "Fireball damage", value: (s, e) => weaponDamage(WEAPONS.staff, s, e.staff) },
 ];
 
 /** Character sheet: stage stat points with a live derived-stat preview, then Confirm or Cancel. */
@@ -61,8 +62,8 @@ export class CharacterSheet extends Panel {
     }).join("");
 
     const derivedRows = DERIVED.map(({ label, value }) => {
-      const now = value(player.stats);
-      const next = value(preview);
+      const now = value(player.stats, player.equipment);
+      const next = value(preview, player.equipment);
       return `<tr><th>${label}</th><td class="num">${now}${next !== now ? ` <span class="gain">→ ${next}</span>` : ""}</td></tr>`;
     }).join("");
 

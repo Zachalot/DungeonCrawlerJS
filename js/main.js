@@ -1,6 +1,8 @@
 import { Camera } from "./camera.js";
 import { AUTOSAVE_INTERVAL, MAX_FRAME_TIME, UPDATE_HZ } from "./config.js";
+import { POTION_PRIORITY } from "./data/items.js";
 import { WEAPONS, WEAPON_ORDER } from "./data/weapons.js";
+import { countItem } from "./systems/inventory.js";
 import { Game } from "./game.js";
 import { Input } from "./input.js";
 import {
@@ -202,8 +204,10 @@ function handlePresses(pressed) {
     const panel = game.interact();
     if (panel && panels[panel]) openPanel(panel);
   }
-  if (pressed.has("KeyQ")) game.drinkPotion("hp");
-  if (pressed.has("KeyE")) game.drinkPotion("mana");
+  // Interim until the quick-select wheel: drink the best potion of each kind.
+  const best = (kind) => POTION_PRIORITY[kind].find((id) => countItem(game.player.inventory, id) > 0) ?? POTION_PRIORITY[kind][0];
+  if (pressed.has("KeyQ")) game.drinkPotion(best("hp"));
+  if (pressed.has("KeyE")) game.drinkPotion(best("mana"));
 }
 
 function openPanel(id) {
