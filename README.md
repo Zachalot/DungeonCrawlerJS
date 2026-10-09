@@ -20,8 +20,8 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 | Mouse | Aim |
 | Left click / Space (hold) | Attack |
 | 1 / 2 / 3 | Sword / Bow / Staff |
-| Q / E | Drink a health / mana potion |
-| I | Inventory and equipment |
+| Hold Q | Potion wheel: point at a potion and release Q to drink it, or release in the middle to cancel |
+| I | Inventory: drag gear onto the stick figure to equip it |
 | C | Character sheet (spend stat points) |
 | F | Interact: talk, open, enter, leave, recover |
 | Esc | Pause menu, or close the open panel |
@@ -34,6 +34,7 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 
 - **Zombies** have 10 HP and deal 2 damage. Watch for the red windup: stepping back before it ends dodges the hit. They can't enter the village.
 - **Leveling:** zombies give 10 XP plus a chance of gold and arrows. Each level needs `50 × level` XP and grants 3 stat points.
+- **Weapons are items.** You start with a Starter Sword, Bow, and Staff equipped. A weapon you take off can't be used until you equip one again.
 - **Armor** reduces damage by `armor / (armor + 50)`. Leather and Iron sets are sold in the village; Steel only comes from dungeon chests.
 - **The village** has a Potion Vendor (NE), a General Vendor who also buys your loot (SW), a Respec Trainer (NW), and a Stash (SE). Anything in the stash is safe from death. Click or drag stacks between your bag and the stash, or use the separate "all items" and "all gold" buttons.
 - **Hover any item** to see its stats and what clicking it does.

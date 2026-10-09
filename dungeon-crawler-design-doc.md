@@ -41,7 +41,7 @@ Village (safe) ──buy potions/arrows/armor──▶ Overworld ──find─�
 | Mouse | Aim |
 | Left click / Space | Attack with the equipped weapon |
 | 1 / 2 / 3 | Switch to Sword / Bow / Staff |
-| Q / E | Drink health / mana potion |
+| Hold Q | Quick-select wheel: point at a potion, release Q to drink it (release in the middle to cancel) |
 | I | Inventory and equipment |
 | C | Character sheet (spend stat points) |
 | M | Toggle the large map |
@@ -50,6 +50,11 @@ Village (safe) ──buy potions/arrows/armor──▶ Overworld ──find─�
 | ` (backtick) | Dev panel (§14.4) |
 
 The player carries all three weapons and swaps between them instantly; weapons aren't a "class" choice. Hybrid stat builds are therefore valid, and when you run out of arrows or mana, you swap to the sword.
+
+**Quick-select wheel (issue #6):**
+- Holding Q opens a radial menu centered on the mouse, kept fully on screen. It has four segments clockwise from the top: Minor Health, Greater Health, Greater Mana, Minor Mana. Each shows its count, and types you don't carry are greyed out.
+- Releasing Q over a segment drinks that exact potion. Releasing in the center dead zone, pressing Esc, or the window losing focus cancels.
+- **The game keeps running at full speed** while the wheel is open, so picking quickly matters. The mouse belongs to the wheel meanwhile: no attacks, and aim is frozen, but you can still move.
 
 ---
 
@@ -108,7 +113,11 @@ Potions are the burst refill. Regen is tracked as a fractional accumulator, whil
   - **Sword:** free, fast, strong against crowds.
   - **Bow:** long-range single target, costs gold over time.
   - **Staff:** highest burst damage, costs mana, slowest attack.
-- **No weapon damage bonus in the POC.** All three weapons are fixed starter items. The item schema keeps a `weaponBonus` field (always 0) so weapon tiers can be added later without a save migration.
+- **Weapons are items (issue #6).**
+  - Each weapon kind has an equipment slot (sword, bow, staff). Damage is that kind's stat formula plus the equipped item's `weaponBonus`: `floor(stat × multiplier) + weaponBonus`.
+  - A new character starts with a Starter Sword, Starter Bow, and Starter Staff equipped, each with a `weaponBonus` of 0. Better weapons are a data entry away.
+  - **An empty weapon slot can't attack.** Trying shows "No sword equipped. Equip one in your inventory (I)."
+  - Starter weapons sell for 0 g, and the General Vendor sells spares for 5 g.
 
 ### 5.2 Hit feedback and safety
 - Floating damage numbers (white for damage dealt, red for damage taken, grey "Blocked!" when armor negates a hit).
@@ -262,7 +271,12 @@ New enemy types are added as data entries, optionally with a new `ai` behavior. 
 ## 9. Items, Inventory, and Equipment
 
 ### 9.1 Equipment slots
-`helmet`, `chest`, `legs`, `gloves`, `boots`, plus `sword`, `bow`, `staff`. The weapon slots are permanently filled with the starter weapons in the POC.
+`helmet`, `chest`, `legs`, `gloves`, `boots`, plus `sword`, `bow`, `staff`. Every slot takes only items of its own kind.
+
+**Inventory screen (I):**
+- A stick figure shows the eight slots: helmet at the head, chest and gloves at the torso and hand, sword, bow, and staff in the hands, then legs and boots. The 24-slot bag sits beside it.
+- **Drag gear onto its slot** to equip it; while dragging, the correct slot glows green and the others dim. Dropping on the wrong slot leaves everything where it was and explains, e.g. "Leather Leggings goes in the Legs slot, not Chest."
+- Drag equipped gear back to a bag cell to take it off, or drag between bag cells to rearrange. Clicking still works: click gear to equip it, or a potion to drink it.
 
 ### 9.2 Item schema
 ```js
@@ -272,12 +286,12 @@ New enemy types are added as data entries, optionally with a new `ai` behavior. 
   type: "armor",              // armor | weapon | consumable | misc
   slot: "helmet",             // armor/weapon only
   armor: 4,                   // armor only
-  weaponBonus: 0,             // weapon only; reserved, always 0 in POC
+  weaponBonus: 0,             // weapon only: flat damage added to the slot's stat formula (0 for starters)
   stats: {},                  // reserved for future bonuses, e.g. { end: 1 }
   stackable: false,
   maxStack: 1,
   buyPrice: 40,
-  sellPrice: 20               // always floor(buyPrice × 0.5)
+  sellPrice: 20               // floor(buyPrice × 0.5) unless overridden (starter weapons: 0)
 }
 ```
 Item **instances** are `{ uid, defId, qty }`. Definitions live in code, and only instances are saved.
@@ -304,7 +318,7 @@ Item **instances** are `{ uid, defId, qty }`. Definitions live in code, and only
 
 - Greater potions restore a percentage, so they stay relevant as the player levels. Minor potions are the cheap early option.
 - Potions share a **1 s cooldown** to prevent spamming.
-- Q and E drink the best potion available of each type (Greater first) **[Default]**.
+- Potions are drunk by type from the quick-select wheel (hold Q) or by clicking them in the inventory.
 
 ### 10.2 General Vendor
 - **Sells:**
@@ -323,13 +337,17 @@ Item **instances** are `{ uid, defId, qty }`. Definitions live in code, and only
 - **Items and gold are handled separately,** because players tend to treat them separately. There are four buttons: Deposit all items, Deposit all gold, Withdraw all items, and Withdraw all gold. If the destination fills up, whatever didn't fit stays where it was.
 
 ### 10.4 Starting kit
-Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 Minor Mana Potions, and 25 g.
+Starter Sword, Starter Bow, and Starter Staff (equipped), 30 arrows, 2 Minor Health Potions, 2 Minor Mana Potions, and 25 g.
 
 ---
 
 ## 11. Death and Graves (Souls-style)
 
-1. **On death,** all equipped armor, all inventory items, and all quiver arrows drop into a **grave** at the death location. Gold is kept. The starter weapons stay with the player so they're never helpless.
+1. **On death,** all equipped armor, all inventory items, and all quiver arrows drop into a **grave** at the death location. Gold is kept. Weapons:
+   - Equipped *starter* weapons stay on you, since a fresh set would be handed out anyway.
+   - Better equipped weapons go into the grave.
+   - Any empty weapon slot is re-armed with a fresh starter, so you never respawn helpless.
+   - On recovery, a buried weapon goes back into its slot and the starter standing in for it moves to your bag.
 2. **The player respawns** in the village with full HP and mana.
 3. **Recovery:** walk to the grave and press F to restore everything. Armor re-equips into its original slots; if the inventory is full, the overflow stays in the grave.
 4. **One grave at a time.** Dying again before recovery permanently destroys the previous grave and its contents, and a new grave is created at the new death location. This is the real "lose everything" moment.
@@ -349,7 +367,7 @@ Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 
   - HP bar, mana bar, and XP bar with level
   - Gold and arrow count
   - Weapon icons 1/2/3 (the equipped one highlighted, with a cooldown sweep)
-  - Potion counts (Q/E)
+  - Potion totals with a "Hold Q" reminder
   - Grave direction arrow (when a grave exists)
 - **Minimap** (top right, ~160 px):
   - Shows explored tiles only, under fog of war.
@@ -376,10 +394,10 @@ Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 
 ## 13. Persistence (localStorage)
 
 ### 13.1 Save schema
-As implemented in `js/save.js` (v1):
+As implemented in `js/save.js` (v2; v2 added the `sword` / `bow` / `staff` equipment slots, and the v1 → v2 migration arms old characters with starter weapons):
 ```json
 {
-  "version": 1,
+  "version": 2,
   "seed": 1234567,
   "savedAt": "2026-10-09T12:00:00.000Z",
   "playTime": 754,

@@ -19,11 +19,12 @@ export function itemIcon(defId, qty = 1, attrs = "") {
 
 /**
  * A grid of slots; empty slots render as blanks. `attrsFor(i)` supplies per-item data
- * attributes; `gridAttrs` goes on the grid itself (e.g. a drop-zone marker).
+ * attributes, `emptyAttrsFor(i)` the same for empty slots (e.g. drop targets), and
+ * `gridAttrs` goes on the grid itself.
  */
-export function slotGrid(slots, attrsFor, gridAttrs = "") {
+export function slotGrid(slots, attrsFor, gridAttrs = "", emptyAttrsFor = () => "") {
   return `<div class="slot-grid" ${gridAttrs}>${slots
-    .map((slot, i) => (slot ? itemIcon(slot.defId, slot.qty, attrsFor(i)) : `<div class="item-icon empty"></div>`))
+    .map((slot, i) => (slot ? itemIcon(slot.defId, slot.qty, attrsFor(i)) : `<div class="item-icon empty" ${emptyAttrsFor(i)}></div>`))
     .join("")}</div>`;
 }
 
