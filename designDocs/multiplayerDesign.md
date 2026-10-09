@@ -1,10 +1,10 @@
 # Multiplayer — Engineering Design Guide
 
-> Status: Draft v0.1 (planning only; nothing here is built) · Client: browser, vanilla JS, no build step · Server (proposed): Node.js + WebSockets · Database: Supabase Postgres (see `migration-to-persistent-storage.md`)
+> Status: Draft v0.2 (planning only; nothing here is built; v0.2 adds the invasion PvP model in §17) · Client: browser, vanilla JS, no build step · Server (proposed): Node.js + WebSockets · Database: Supabase Postgres (see `migration-to-persistent-storage.md`)
 
 **What this is:** a guide to the problems of turning the single-player game into a shared world (many players seeing each other, raiding dungeons, and fighting across factions), with a proposed solution for each. It is written to be reread when you decide to take this step, so it explains the reasoning and doesn't assume you remember it.
 
-**How to read it:** §2 is the core idea. §3 is the concrete refactor plan against today's code. §4–§7 cover networking and latency. §8–§12 cover the world, data, security, and scale. §13 is the milestone plan. Items marked **[Default]** are my recommendation where you haven't decided, and any can change. Numbers marked *(estimate)* are back-of-envelope and must be measured before you rely on them.
+**How to read it:** §2 is the core idea. §3 is the concrete refactor plan against today's code. §4–§7 cover networking and latency. §8–§12 cover the world, data, security, and scale. §13 is the milestone plan. §17 is the proposed PvP model (invading another player's village), which replaces the open-world PvP in §11 and changes what §13 has to build. Items marked **[Default]** are my recommendation where you haven't decided, and any can change. Numbers marked *(estimate)* are back-of-envelope and must be measured before you rely on them.
 
 **Related docs:**
 - `dungeon-crawler-design-doc.md` is the single-player game design.
@@ -16,7 +16,7 @@
 
 ### 1.1 Goals
 - Many players share one persistent overworld and can see, fight, trade with, and group with each other.
-- Party dungeon raids, and faction-vs-faction PvP.
+- Party dungeon raids, and PvP. **Proposed:** PvP happens only by invading another player's village and fighting its AI defenses (§17), not by players fighting each other in the open world.
 - Stay a browser game: a static client on GitHub Pages plus one or more Node.js game servers.
 - Players can't cheat the economy or combat by editing their own client.
 
@@ -514,6 +514,8 @@ With server-owned writes, save codes stop being trusted input for online charact
 ---
 
 ## 11. PvP and Faction Design Problems
+> **Superseded if §17 is adopted.** This section describes open-world PvP between live players. §17.2 lists which of these problems the invasion model removes and which it keeps.
+
 These are design questions, not engineering ones, but they decide the data model and rules:
 
 - **Faction model:** how a player gets a faction, whether it can change, and what it costs. Friendly fire rules, and who can enter whose territory.
@@ -577,7 +579,7 @@ Numbered MP1–MP8 so they don't collide with the other docs. Each should leave 
 | **MP4** | Prediction + latency tooling | Own movement is predicted and reconciled; a network conditioner (artificial delay, jitter, loss) is built into the client; the game plays acceptably at 150 ms RTT and 2% loss |
 | **MP5** | Combat sync | Server-owned attacks, projectiles, damage, and kills; event-driven animations; lag compensation for melee; zombies target multiple players; two players can kill zombies together |
 | **MP6** | Server-owned persistence + instances | The forgeable-save issue in §10.6 is closed; RLS flipped (client can't write online characters); write-behind with immediate transactional writes; session lease and revision fencing; dungeon party instances; export/import disabled online |
-| **MP7** | PvP, factions, social | Faction rules and safe zones enforced server-side; chat; kill credit; reporting and admin tools; rate limiting and anti-abuse; a decision recorded for grave looting |
+| **MP7** | PvP, factions, social | Faction rules and safe zones enforced server-side; chat; kill credit; reporting and admin tools; rate limiting and anti-abuse; a decision recorded for grave looting. *Under §17 this becomes the IV milestones in §17.9.* |
 | **MP8** | Scale and operations | A bot-based load test reports tick time, bandwidth, and capacity per process; metrics and logs in place; graceful deploys with protocol versioning; Stage B channel assignment if load demands it; backups and restore tested |
 
 ### MP1 in detail (the foundation, and the largest risk)
@@ -621,6 +623,7 @@ This is mostly mechanical but touches many files, so do it in small commits with
 8. **Channels.** Players choose a channel, or are auto-assigned **[Default]**? Can friends join each other's channel?
 9. **Movement model.** Keep the smooth, pixel-based movement with prediction **[Default]**, or simplify to tile-stepped movement (much easier to network, but a gameplay change)?
 10. **Server language.** JavaScript **[Default]**, which shares the simulation code directly with the browser, or TypeScript on both sides to catch protocol mismatches earlier (introduces a build step)?
+11. **PvP model.** Invasion-only PvP (§17) **[Default]**, or open-world PvP (§11)? Invasion-specific questions are in §17.10.
 
 ---
 
@@ -633,3 +636,186 @@ Until multiplayer starts, these keep the eventual refactor smaller:
 - Put cosmetic-only state (screen shake, damage numbers) behind events, not inside gameplay objects.
 - Avoid new UI that depends on synchronous return values from game methods for things involving gold, loot, or shops.
 - Add item and character fields through the existing save `migrate()` chain, so nothing is stored in an unversioned shape.
+
+---
+
+## 17. Invasion PvP (proposed PvP model)
+
+> Status: proposed 2026-10-09. Replaces the open-world PvP in §11 if adopted.
+
+### 17.1 The model
+- Building happens only in the player's own **village**: expand village tiles, build guard towers and barracks, recruit soldiers.
+- An invader opens an **invasion portal** into another player's world, fights through that village's **AI defenses**, and raids its **treasury chest**.
+- **Players never fight each other.** One human fights defenses that another human built. The defender usually isn't even online.
+- PvP turns on at a progression threshold (**[Default]** level 30; see §17.8 for why character level alone is a weak gate).
+
+The engineering consequence: real-time fairness between two players goes away, and **economy integrity** becomes the core problem. A raid moves loot from one account to another, so every number feeding it has to be one a cheater can't invent (§17.6).
+
+### 17.2 What this does to §11 and the rest of the doc
+
+| Problem | Open-world PvP (§11) | Invasion PvP |
+|---|---|---|
+| Lag compensation between players (§6.6) | Required, and the hardest fairness problem | **Gone.** Defenders are AI, like zombies, which need no special handling. |
+| Faction model, territory, friendly fire | Required | **Gone.** The portal is the only way into PvP. |
+| Safe zones in `damagePlayer` (§8.4) | Required | **Gone.** No player ever damages another. |
+| Graves looted by enemies | Hard decision | **Gone.** The stake is the treasury. An invader who dies just fails the raid (§17.8). |
+| PvP balance (dodging, potion timing) | A balance pass against humans | **Smaller.** Tune players vs AI you control. The balance work moves to the defense economy. |
+| Griefing (spawn camping, ganking low levels) | Many mitigations | Replaced by matchmaking bands and shields (§17.8). |
+| Kill credit | Required | Trivial (one invader). |
+| Combat logging (§4.4) | Grace period | The invader disconnecting forfeits the raid. The defender isn't present. |
+| Shared overworld, AOI, remote players (§7, MP3) | Required | **Optional.** Only needed if you still want co-op or social play in a shared world. |
+| Economy integrity (§10.3, §10.6) | Required | **Required, and now central.** See §17.6. |
+
+### 17.3 Raid flow
+
+| Step | Where | What happens |
+|---|---|---|
+| 1 | Invader's client | Opens the portal and requests a target. |
+| 2 | Server | Matchmaking picks a defender in the invader's band who isn't shielded or already under raid. It takes a **raid lock** on that village, freezes a **snapshot** of its layout, defenses, and treasury, and creates a `raids` row with a server-chosen RNG seed and an expiry (**[Default]** 10 minutes). |
+| 3 | Invader's client | Receives the snapshot and seed and plays the raid as an instance (§8.1). Either the server simulates it live, or the client simulates it and records inputs (§17.5). |
+| 4 | Server | Decides the outcome: what was destroyed, whether the treasury was reached, and how much is taken, applying the loot cap. **The client never reports a loot amount.** |
+| 5 | Server | **Settles in one transaction:** debit the defender's treasury, credit the invader, write ledger rows, shield the defender, release the lock. A `revision` check (§9.3) makes a second settlement of the same raid fail. |
+| 6 | Defender | Sees a raid report next time they log in (a replay if inputs were recorded). |
+
+**The defender is online during the raid.** They play their own world and can't touch the treasury while it's locked (**[Default]**: withdrawals and building wait until settlement, with a "Your village is under attack" notice). A later option is to let the defender join the fight. That makes it live PvP again, with everything in §11 coming back, so keep it out of scope.
+
+### 17.4 Data model
+New tables. **All of them are server-written only** (§17.6.3):
+
+| Table | Contents |
+|---|---|
+| `villages` | `owner_id`, `revision`, tile expansion, layout (`jsonb`, size-capped), defense power score (for matchmaking) |
+| `village_objects` | Towers, barracks, walls: type, level, position. Or keep these inside `villages.layout` while the cap is small. |
+| `soldiers` | Recruited units per village (type, level, count) |
+| `treasuries` | The raidable store: gold and materials, plus `revision` |
+| `raids` | `id`, invader, defender, snapshot, seed, `status` (`active`/`settled`/`expired`), result, timestamps |
+| `shields` | Defender, `expires_at` |
+| `ledger` | Append-only record of every gold, material, and item movement: account, amount, reason (`raid`, `build`, `deposit`, `vendor`…), source id. Used for audits and rollbacks. |
+
+The **stash** (design doc §10.3) stays safe from raids. The treasury is a separate store (§17.10).
+
+### 17.5 Live server simulation vs. input replay
+The server has to *decide* the raid outcome, because the client can't be trusted to. There are two ways to do that:
+
+| | **A. Live server simulation** | **B. Client simulation + server replay** |
+|---|---|---|
+| How | The authoritative server of §2–§6 runs the raid instance, with inputs going up and snapshots coming down | The client runs the raid locally and records `{ step, controls }` for every fixed step. On finish it uploads the log. The server re-runs the same simulation headless from the snapshot, the seed, and the log, and takes *its own* result. |
+| Needs | WebSockets, tick loop, prediction, interpolation (MP2–MP5) | A headless Node worker (no WebSockets) and a **deterministic** simulation |
+| Feel | Network latency on every action | Zero latency. It's single-player while you play. |
+| Cheating | Impossible to forge results | Impossible to forge results. A modified client can only send inputs, and the replay ignores whatever the client believes happened. Bots that play perfectly still work (as they would in A). |
+| Risk | All the latency work in §4–§6 | **Determinism.** A replay that diverges from honest play rejects honest players. |
+
+**[Default] B**, if the determinism test below passes. It lets invasions ship before the real-time server exists.
+
+**Determinism checklist for B.** Every item is required, and the replay test has to prove it:
+- No `Math.random` in the simulation. Randomness already comes in through injected RNGs, but `js/systems/loot.js`, `spawner.js`, `combat.js`, `entities/zombie.js`, and `game.js` still fall back to `Math.random` defaults, and those defaults must go (MP1 step 2).
+- No `Date.now`/`performance.now` in the simulation. Time is `step × STEP` only.
+- A fixed step, and inputs recorded per step, not per frame.
+- **Trig functions.** The spec doesn't require `Math.sin`, `Math.cos`, `Math.atan2`, or `Math.hypot` to give bit-identical results across JavaScript engines (V8, SpiderMonkey, JavaScriptCore), and the simulation uses them (`zombie.js`, `projectile.js`, `player.js`, `combat.js`, `game.js`, `collision.js`). A Firefox player's raid replayed on Node could drift. Fixes: compute these through a shared implementation in `shared/` (a lookup table or polynomial using only `+ − × ÷`, which *are* exact under IEEE 754), or quantize positions and angles each step so tiny differences can't compound. `Math.sqrt` is exact under IEEE 754 and is fine.
+- Stable iteration order (arrays, not object key order that depends on how entities were inserted).
+- **Test:** run recorded raids in Chrome, Firefox, and Safari, replay each in Node, and require identical final state hashes. Make this part of `node --test` using checked-in input logs.
+
+**Server cost** *(estimate; measure)*: a replay runs faster than real time because there's no rendering. A 5-minute raid is 9,000 steps at 30 Hz, which is probably well under a second of CPU. Supabase Edge Functions have tight per-request CPU limits *(verify current limits)*, so a small Node worker pulling from a `raids` queue is the safer home.
+
+### 17.6 Security: stopping save editing from reaching other players
+§10.6 already establishes that today **anything the browser writes can be forged**. Save codes are base64, `window.game` is editable, and `save_slot` accepts any JSON for the caller's own row. That was acceptable for single player because a cheater only cheated themselves. Invasions break that: **a forged save now harms other players.**
+- A forged village (99 towers, max-level soldiers) can't be raided, and it takes nothing from the forger.
+- A forged invader (10,000 STR, perfect gear) takes everyone's treasury.
+- A forged treasury lets someone launder gold into other accounts by getting themselves raided deliberately.
+
+#### 17.6.1 Sort state by who it can hurt
+
+| Tier | State | Who it hurts if forged | Rule |
+|---|---|---|---|
+| **1. Contested** | Village layout, defenses, soldiers, treasury, shields, raid results, PvP rating | Other players directly | **Server-written only.** The browser has no write path. |
+| **2. Feeds contested** | Character level, stats, XP, gear, inventory, stash, gold: everything the invader brings into a raid and everything spent on building | Other players indirectly | **Online characters are server-owned** (§17.6.2) |
+| **3. Private** | Fog of war, settings, key bindings, minimap zoom | Nobody | The client may write it under normal RLS (§9.4) |
+
+Most of the danger is in tier 2. Fixing only tier 1 isn't enough: if gold and gear stay client-written, a cheater just *legitimately* buys 99 towers with forged gold, or walks into raids with forged stats.
+
+#### 17.6.2 Online characters vs. offline saves
+Split characters into two kinds that never mix:
+
+| | Offline character | Online (PvP-eligible) character |
+|---|---|---|
+| Stored | localStorage and/or the current client-written `saves` table | New server-written `characters` table |
+| Who writes it | The browser (today's `save_slot`) | Server code only |
+| Export/import save codes | Allowed (cheating only affects you) | **Disabled** (§9.2) |
+| Can invade or be invaded | **No** | Yes |
+| Convert offline → online | **Never.** An offline save can't be uploaded or "promoted." Otherwise every forged offline save becomes a forged online one. |
+
+The current M8 cloud saves are offline characters under this split.
+
+#### 17.6.3 Database rules (Supabase)
+- **RLS on every tier 1 and tier 2 table:** `select` for the owner only (plus whatever matchmaking needs, ideally through a function that returns just a power score, not the whole village). **No `insert`/`update`/`delete` policy for the `authenticated` role.** Without a policy, the client simply can't write.
+- **All writes go through validated server code:** either Postgres functions declared `security definer`, or the Node worker using the `service_role` key (§9.1), which lives only in server environment variables and never in the repo or browser.
+- **A function that trusts its arguments is no better than direct table access.** `save_slot(p_data jsonb)` is safe for offline saves only because it writes an untrusted row. An online-character function must take an *intent* (`build_tower(x, y, type)`, `recruit(type, n)`) and work out the result itself: check `auth.uid()`, read current state, verify cost and caps, and apply the change in one transaction with a `revision` check. Never accept a resulting balance, inventory, or stat value from the client.
+- `security definer` hygiene: `set search_path = ''` (or a fixed schema) in each function, take the user from `auth.uid()` and never from a parameter, and `revoke execute … from public` on anything internal.
+- Item uids become globally unique (§3.2), and every movement of gold, materials, or items writes a `ledger` row in the same transaction.
+
+#### 17.6.4 Making tier 2 trustworthy (where gold and XP come from)
+Server-owned storage only helps if the server also knows the values are real. Something has to decide that a player *earned* 5,000 gold in a dungeon. In order of strength:
+
+| Approach | How | Stops | Cost |
+|---|---|---|---|
+| **1. Plausibility caps** (the floor) | Server functions bound every gain: gold and XP per real-time hour scaled by level, XP-to-level matches the curve in `leveling.js`, stat totals ≤ `20 + 3 × (level − 1)`, gear only with affixes and stat ranges the loot tables can actually roll, and village objects within the caps for the player's level | Careless and extreme edits | Cheap. **Doesn't stop cheating.** It limits the worst case to "a player who got lucky every time, as fast as the caps allow." |
+| **2. Session replay** | Same as §17.5 B, applied to PvE. Every dungeon run or play session uploads its input log, and gains are credited only after the server replays it. Can be sampled (e.g. every run above a gain threshold, plus a random 10%) once trust is established. | Forged results of any kind | The determinism work from §17.5 (shared), plus replay CPU for PvE |
+| **3. Live server simulation** | Online characters play PvE on the authoritative server (§2, MP1–MP6) | Everything except bots | The full real-time server |
+
+**[Default]: 1 from day one plus 2 before PvP opens.**
+- Ship the caps with the first server-owned table. They're cheap and catch most cheaters.
+- Raids always use replay (§17.5), so the determinism work happens anyway, and PvE replay reuses it.
+- Choose 3 instead only if you also want a shared real-time overworld, since it requires the same server.
+
+What cheaters can still do under 1 + 2: bots and macros that play well (a browser game can't fully prevent these; rate caps and anomaly flags bound them), and account sharing or multi-accounting to feed one account (§17.6.5).
+
+#### 17.6.5 Detection and response
+- **Anomaly flags** from the ledger: gain rates near the cap for long stretches, raid win rates far above the matchmaking band, repeated raids between the same two accounts (gold laundering through deliberate losses), and many accounts from one IP raiding the same target.
+- **Response:** flagged accounts drop out of matchmaking (others can't raid them and they can't raid others) until reviewed. The ledger allows rolling back specific transactions instead of wiping the account.
+- **Anti-laundering rules:** cap how often the same pair can raid each other (**[Default]** once per 24 h), and cap total loot received per day.
+- The dev panel, `godMode`, and `window.game` don't exist for online characters (§10.5).
+
+#### 17.6.6 Raid-specific rules
+- **One active raid per invader and per village**, enforced with a unique partial index on `raids` (`where status = 'active'`).
+- **The seed is chosen by the server** and kept private until the raid starts, so a client can't search for a lucky one. Re-opening the same raid isn't possible after starting (a retry costs a new portal).
+- **Expiry:** an unsettled raid past its expiry settles as a loss for the invader.
+- **Input logs are validated before replay:** bounded length (steps ≤ expiry × tick rate), every control value in range (§10.2), and rejection of `NaN`/`Infinity`.
+- **Replay idempotency:** settling the same `raids.id` twice fails the `revision`/`status` check.
+
+### 17.7 What it costs to build
+
+| Piece | Reuses | New |
+|---|---|---|
+| Village building UI and rules | Village tiles, `economy.js` | Building placement, tower/barracks/soldier data, caps per level |
+| Defense AI | `Zombie` AI (targeting, aggro, line of sight) | Tower targeting, soldier formations, patrols |
+| Raid instance | Dungeon instancing pattern (§8.1), world generation from seed | Loading a village snapshot as an area |
+| Server | Supabase auth, `revision` compare-and-set from `0002_saves.sql` | Server-owned tables and functions (§17.6.3), a replay worker, matchmaking |
+
+### 17.8 Game rules that keep it fair
+- **Loot cap:** a raid takes at most a percentage of the treasury (**[Default]** 20%). The stash is never raidable.
+- **Shields:** a successful raid gives the defender protection (**[Default]** 12 h). Attacking someone yourself ends your own shield early.
+- **Matchmaking by power, not level:** match invader gear and level against village defense power. Level 30 alone invites two problems: players parking at level 29 forever, and veterans farming fresh level-30 villages. **[Default]:** PvP unlocks at 30, but targets come from a power band.
+- **Portal cost:** opening a portal costs something (gold or a crafted item), so raids aren't free spam.
+- **Invader death:** the raid ends and the portal cost is lost. **[Default]** No gear drops (no grave in someone else's world). Revisit if failing a raid feels too cheap.
+- **Opt-out before the threshold:** players below the threshold can't be raided at all, so new players learn the game in peace.
+
+### 17.9 Milestones (if invasion PvP is adopted)
+These can run **before** the real-time server (MP2–MP5), because §17.5 B needs only a headless worker.
+
+| # | Milestone | Done when |
+|---|---|---|
+| **IV0** | Prerequisites | MP0 done. MP1 steps 1–2 done (simulation in `shared/`, no `Math.random` defaults). |
+| **IV1** | Online characters, server-owned | `characters` table with no client write policy. Intent-based server functions for vendor, equip, and stash. Plausibility caps (§17.6.4 #1). Ledger. Online vs offline split with export/import disabled online. No offline→online conversion. |
+| **IV2** | Determinism | Shared trig and quantization. A recorded-input replay test passes with identical state hashes across Chrome, Firefox, Safari, and Node. |
+| **IV3** | Session replay for PvE | Dungeon runs credit gold, XP, and loot only after the worker replays them. |
+| **IV4** | Village building | Village, objects, and soldiers are server-owned, built through intent functions with per-level caps. Defense AI works in your own village. |
+| **IV5** | Invasions | Portal, matchmaking, raid lock and snapshot, raid instance, replay-verified settlement transaction, shields, loot cap, raid report. |
+| **IV6** | Abuse controls | Anomaly flags, matchmaking quarantine, pair-raid and daily loot caps, admin rollback from the ledger. |
+
+### 17.10 Open questions
+1. **Shared overworld?** Is invading the *only* contact between players **[Default]**, or do you still want co-op dungeons and seeing other players? If so, the real-time server (MP2–MP5) is still needed, and §17.6.4 #3 becomes the natural choice.
+2. **Treasury source.** What fills the raidable treasury? **[Default]** Village buildings produce gold and materials into it over time, and building upgrades are paid from it. That gives players a reason to keep value at risk. Should players also be able to deposit dungeon gold into it, or only into the safe stash?
+3. **Defender present.** Never **[Default]**, or let an online defender join the fight (brings back all of §11)?
+4. **Loot cap and shield length.** 20% and 12 h **[Default]**, which need playtesting.
+5. **Raid simulation.** Client simulation with server replay **[Default]**, or a live server?
+6. **What invaders take.** Only treasury currency **[Default]**, or items too?
