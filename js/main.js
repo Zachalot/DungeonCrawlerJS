@@ -255,6 +255,7 @@ function openPanel(id) {
   input.mouse.down = false; // the click that opened a panel must not become an attack
   input.consumeAttackPress();
   modal.classList.toggle("wide", panels[id].wide);
+  modal.dataset.panel = id; // lets CSS size specific panels (e.g. the map)
   modalBackdrop.hidden = false;
   panels[id].open();
 }

@@ -370,11 +370,20 @@ Starter Sword, Starter Bow, and Starter Staff (equipped), 30 arrows, 2 Minor Hea
   - Potion totals with a "Hold Q" reminder
   - Grave direction arrow (when a grave exists)
 - **Minimap** (top right, 160 px, with the controls hint underneath):
-  - An 80 × 80-tile window around the player (2 px per tile), clamped to the area. A dungeon, being smaller, is shown whole. It refreshes ten times a second.
+  - A 40 × 40-tile window centered on the player (4 px per tile), refreshed ten times a second.
   - Shows explored tiles only, under fog of war.
-  - **Overworld markers:** the village outline, discovered dungeon entrances (orange, grey once looted), your grave (always shown, even in fog), and you, with a tick pointing where you aim.
-  - **Dungeon markers:** the exit portal, the chest, and the ladder, once you've seen them.
-  - **M** opens a full-screen map of the whole current area with the same layers and a legend. Like the other menus, it pauses the game.
+- **Map markers** have fixed pixel sizes, so they stay readable at any zoom:
+  - **Village:** a filled gold square, at least 14 px.
+  - **Dungeons:** an orange stairs icon while unlooted, and a grey ✓ icon once looted.
+  - **Your grave:** a white cross, always shown, even in fog.
+  - **You:** a blue arrow pointing where you aim.
+  - **In dungeons:** the exit portal, the chest, and the ladder, once you've seen them.
+- **Full-screen map (M):**
+  - Opens zoomed in on you, at 5 px per tile. Dungeons, being small, open whole.
+  - **Scroll to zoom** around the cursor and **drag to pan**. Buttons do the same: zoom −/+, Center on me, and Whole map.
+  - Zoom runs from fitting the whole area up to 16 px per tile. Panning stops at the area's edges.
+  - Labels appear once zoomed in to 3 px per tile or more: "Village", "Lv 2", "Lv 1 · Looted", "Your grave", and in dungeons "Exit", "Treasure", "Ladder".
+  - The legend's swatches use the same shapes as the icons. Like the other menus, the map pauses the game.
 - **Fog of war:**
   - Tiles within an 8-tile radius of the player become explored, updated whenever they step onto a new tile.
   - Overworld exploration is tracked per chunk as a bitset and saved (§13.1). Dungeon exploration lasts for one visit.

@@ -80,7 +80,9 @@ export const AUTOSAVE_INTERVAL = 60; // s
 // Maps.
 export const FOG_REVEAL_RADIUS = 8; // tiles around the player that become explored
 export const MINIMAP_SIZE = 160; // px
-export const MINIMAP_TILE_PX = 2; // px per tile, so the minimap spans 80 tiles
+export const MINIMAP_TILE_PX = 4; // px per tile, so the minimap spans 40 tiles
+export const MAP_OPEN_TILE_PX = 5; // full map (M) opens at this zoom, centered on the player
+export const MAP_MAX_TILE_PX = 16; // most zoomed-in the full map goes
 
 export const UPDATE_HZ = 60;
 export const MAX_FRAME_TIME = 0.25; // s; caps catch-up after a stall

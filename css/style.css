@@ -317,12 +317,30 @@ body {
   color: var(--text-dim);
 }
 
+.modal[data-panel="map"] {
+  width: min(960px, calc(100vw - 32px));
+}
+
 .world-map {
   display: block;
   margin: 8px auto;
   border: 1px solid var(--panel-border);
   border-radius: 4px;
   image-rendering: pixelated;
+  cursor: grab;
+  touch-action: none;
+}
+
+.world-map.dragging {
+  cursor: grabbing;
+}
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .map-legend {
@@ -334,14 +352,33 @@ body {
   color: var(--text-dim);
 }
 
+/* Legend swatches echo the map icons: square by default, plus round, cross, and arrow. */
 .map-legend i {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   margin-right: 5px;
-  border-radius: 50%;
   vertical-align: -1px;
-  border: 1px solid rgba(0, 0, 0, 0.8);
+  background: var(--c);
+  border: 1.5px solid rgba(0, 0, 0, 0.85);
+}
+
+.map-legend i.round {
+  border-radius: 50%;
+}
+
+.map-legend i.cross {
+  background: none;
+  border: none;
+  background-image: linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c));
+  background-size: 3px 100%, 100% 3px;
+  background-position: center, 0 35%;
+  background-repeat: no-repeat;
+}
+
+.map-legend i.arrow {
+  border: none;
+  clip-path: polygon(0 0, 100% 50%, 0 100%, 30% 50%);
 }
 
 .modal-backdrop {

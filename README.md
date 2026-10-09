@@ -23,7 +23,7 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 | Hold Q | Potion wheel: point at a potion and release Q to drink it, or release in the middle to cancel |
 | I | Inventory: drag gear onto the stick figure to equip it |
 | C | Character sheet (spend stat points) |
-| M | Full-screen map of everywhere you've explored |
+| M | Full-screen map of everywhere you've explored: scroll to zoom, drag to pan |
 | F | Interact: talk, open, enter, leave, recover |
 | Esc | Pause menu, or close the open panel |
 | ` (backtick) | Dev panel (local play, or add `?dev` to the URL) |
@@ -40,7 +40,7 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 - **Armor** reduces damage by `armor / (armor + 50)`. Leather and Iron sets are sold in the village; Steel only comes from dungeon chests.
 - **The village** has a Potion Vendor (NE), a General Vendor who also buys your loot (SW), a Respec Trainer (NW), and a Stash (SE). Anything in the stash is safe from death. Click or drag stacks between your bag and the stash, or use the separate "all items" and "all gold" buttons.
 - **Hover any item** to see its stats and what clicking it does.
-- **Maps:** the minimap (top right) and the full map (M) show only what you've explored. Dungeons appear as orange dots and turn grey once looted, and your grave is always marked.
+- **Maps:** the minimap (top right) and the full map (M) show only what you've explored. The village is a gold square, unlooted dungeons are orange stairs icons, looted ones are grey with a ✓, and your grave is always marked. On the full map, scroll to zoom, drag to pan, and zoom in to see labels like "Lv 2" and "Looted".
 - **Menus pause the game,** except the potion wheel and the dev panel.
 
 ## Saving
