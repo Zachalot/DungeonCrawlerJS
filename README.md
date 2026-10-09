@@ -32,7 +32,7 @@ Zombies give 10 XP plus a chance of gold and arrows. Each level needs `50 × lev
 
 | Weapon | Damage | Cost | Notes |
 |---|---|---|---|
-| Sword | STR × 1 | free | 90° cleave, knockback, 0.4 s |
+| Sword | STR × 1 | free | 90° cleave with 1.7-tile reach, knockback, 0.4 s |
 | Bow | floor(DEX × 1.5) | 1 arrow | 8-tile range, 0.6 s |
 | Staff | floor(INT × 1.5) | 5 mana | 7-tile range, 0.8 s |
 

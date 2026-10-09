@@ -96,10 +96,11 @@ Potions are the burst refill. Regen is tracked as a fractional accumulator, whil
 
 | Weapon | Damage | Cost | Range | Cooldown | Special |
 |---|---|---|---|---|---|
-| **Sword** | `STR × 1` | None | Melee, 90° arc in front, ~1.2 tiles | 0.4 s | **Cleave** (hits every enemy in the arc) + **knockback** 0.5 tiles |
+| **Sword** | `STR × 1` | None | Melee, 90° arc in front, 1.7 tiles (reaches any zombie whose body overlaps the arc) | 0.4 s | **Cleave** (hits every enemy in the arc) + **knockback** 0.5 tiles |
 | **Bow** | `floor(DEX × 1.5)` | 1 arrow | Projectile, ~8 tiles | 0.6 s | Can't fire with 0 arrows ("No arrows!" toast) |
 | **Staff** | `floor(INT × 1.5)` | 5 mana | Projectile, ~7 tiles | 0.8 s | Can't cast with < 5 mana ("Not enough mana" toast) |
 
+- **Attack input:** every click or Space press counts, even a tap released before the next frame. It fires on the next simulation step (≤16 ms) if the weapon is ready. A press during the last 0.2 s of a cooldown is buffered and fires the instant the cooldown ends. Earlier presses are dropped, so a stale click never fires late. Holding the button attacks on every cooldown.
 - Projectiles are stopped by rocks, trees, and walls, and hit the first enemy in their path.
 - Weapon identities:
   - **Sword:** free, fast, strong against crowds.

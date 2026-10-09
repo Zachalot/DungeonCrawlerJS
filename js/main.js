@@ -101,6 +101,7 @@ function openPanel(id) {
   if (activePanel) panels[activePanel].close();
   activePanel = id;
   input.mouse.down = false; // the click that opened a panel must not become an attack
+  input.consumeAttackPress();
   modalBackdrop.hidden = false;
   panels[id].open();
 }
@@ -109,6 +110,7 @@ function closePanel() {
   if (!activePanel) return;
   panels[activePanel].close();
   activePanel = null;
+  input.consumeAttackPress(); // presses made while paused don't carry over
   modalBackdrop.hidden = true;
   modal.innerHTML = "";
 }
@@ -125,6 +127,7 @@ function readControls() {
     move: input.moveVector(),
     aim: camera.screenToWorld(input.mouse.x, input.mouse.y),
     attack: input.isAttacking(),
+    attackPressed: input.consumeAttackPress(),
     weapon: WEAPON_ORDER.find((id) => input.keys.has(WEAPONS[id].key)) ?? null,
   };
 }

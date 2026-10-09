@@ -1,4 +1,11 @@
-import { INTERACT_RANGE, OUT_OF_COMBAT_DELAY, PLAYER_IFRAMES, RESPAWN_IFRAMES, TILE_SIZE } from "./config.js";
+import {
+  ATTACK_BUFFER_TIME,
+  INTERACT_RANGE,
+  OUT_OF_COMBAT_DELAY,
+  PLAYER_IFRAMES,
+  RESPAWN_IFRAMES,
+  TILE_SIZE,
+} from "./config.js";
 import { ENEMIES } from "./data/enemies.js";
 import { WEAPONS } from "./data/weapons.js";
 import { Player } from "./entities/player.js";
@@ -47,7 +54,10 @@ export class Game {
     };
   }
 
-  /** `controls`: { move: {x, y}, aim: {x, y} world px, attack: bool, weapon: id | null }. */
+  /**
+   * `controls`: { move: {x, y}, aim: {x, y} world px, attack: held bool,
+   * attackPressed: bool (a click/press since the last step), weapon: id | null }.
+   */
   update(dt, controls) {
     this.time += dt;
     const player = this.player;
@@ -55,10 +65,16 @@ export class Game {
     if (controls.weapon && WEAPONS[controls.weapon]) player.weapon = controls.weapon;
     player.update(dt, controls.move, controls.aim, this.world);
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
+    player.attackBuffer = Math.max(0, player.attackBuffer - dt);
     player.iframes = Math.max(0, player.iframes - dt);
     player.flash = Math.max(0, player.flash - dt);
 
-    if (controls.attack && player.attackCooldown === 0) this.attack();
+    // A press fires on this step if ready; one made late in a cooldown fires the moment it ends.
+    if (controls.attackPressed) player.attackBuffer = ATTACK_BUFFER_TIME;
+    if ((controls.attack || player.attackBuffer > 0) && player.attackCooldown === 0) {
+      player.attackBuffer = 0;
+      this.attack();
+    }
 
     this.updateProjectiles(dt);
     this.updateZombies(dt);

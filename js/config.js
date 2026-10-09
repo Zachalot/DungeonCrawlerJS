@@ -36,6 +36,7 @@ export const STAT_POINTS_PER_LEVEL = 3;
 export const RESPEC_COST_PER_LEVEL = 50; // gold
 export const INTERACT_RANGE = 1.5; // tiles
 export const PLAYER_IFRAMES = 0.5; // s of invulnerability after taking damage
+export const ATTACK_BUFFER_TIME = 0.2; // s a click made during cooldown waits to fire
 export const RESPAWN_IFRAMES = 2; // s
 export const ARMOR_K = 50; // reduction = armor / (armor + ARMOR_K)
 
