@@ -168,30 +168,44 @@ export function importSave(code) {
 
 // ---- Slots ------------------------------------------------------------------
 
-/** Three save slots in localStorage (or any Storage-like object, for tests). */
+/**
+ * Three save slots in localStorage (or any Storage-like object, for tests).
+ * `owner` is an account id, whose slots are kept apart from other accounts on this browser;
+ * null is the guest (no account), which uses the original unprefixed keys.
+ */
 export class SaveStore {
-  constructor(storage = globalThis.localStorage) {
+  constructor(storage = globalThis.localStorage, { owner = null } = {}) {
     this.storage = storage;
+    this.owner = owner;
+    this.prefix = owner ? `dungeonCrawler.${owner}.slot` : KEY_PREFIX;
   }
 
   /** [{ slot, summary }] for slots 1..SLOT_COUNT; summary is null (empty) or { level, playTime, savedAt, seed, error? }. */
   list() {
     return Array.from({ length: SLOT_COUNT }, (_, i) => {
       const slot = i + 1;
-      const raw = this.storage.getItem(KEY_PREFIX + slot);
-      if (!raw) return { slot, summary: null };
-      try {
-        const data = this.load(slot);
-        return { slot, summary: { level: data.player.level, playTime: data.playTime, savedAt: data.savedAt, seed: data.seed } };
-      } catch (error) {
-        return { slot, summary: { error: error.message } };
-      }
+      return { slot, summary: this.summary(slot) };
     });
+  }
+
+  /** One slot's summary (see list), or null if empty. */
+  summary(slot) {
+    if (!this.raw(slot)) return null;
+    try {
+      return summarize(this.load(slot));
+    } catch (error) {
+      return { error: error.message };
+    }
+  }
+
+  /** The slot's stored JSON string, or null. */
+  raw(slot) {
+    return this.storage.getItem(this.prefix + slot);
   }
 
   /** Returns the migrated, validated save in a slot, or null if empty. Throws if corrupt. */
   load(slot) {
-    const raw = this.storage.getItem(KEY_PREFIX + slot);
+    const raw = this.raw(slot);
     if (!raw) return null;
     return validateSave(migrate(JSON.parse(raw)));
   }
@@ -201,13 +215,32 @@ export class SaveStore {
     const data = gameOrData instanceof Game ? serializeGame(gameOrData) : gameOrData;
     const json = JSON.stringify(data);
     if (json.length > SIZE_WARNING_BYTES) console.warn(`Save slot ${slot} is ${(json.length / 1024).toFixed(0)} KB`);
-    this.storage.setItem(KEY_PREFIX + slot, json);
+    this.storage.setItem(this.prefix + slot, json);
     return json.length;
   }
 
   delete(slot) {
-    this.storage.removeItem(KEY_PREFIX + slot);
+    this.storage.removeItem(this.prefix + slot);
   }
+
+  /** Cloud sync state for a slot: { revision, dirty, deleted, conflict }. Kept outside the save itself. */
+  getMeta(slot) {
+    const raw = this.storage.getItem(`${this.prefix}${slot}.meta`);
+    return { revision: 0, dirty: false, deleted: false, conflict: false, ...(raw ? JSON.parse(raw) : {}) };
+  }
+
+  setMeta(slot, meta) {
+    this.storage.setItem(`${this.prefix}${slot}.meta`, JSON.stringify(meta));
+  }
+
+  clearMeta(slot) {
+    this.storage.removeItem(`${this.prefix}${slot}.meta`);
+  }
+}
+
+/** Title-screen summary of a save. */
+export function summarize(data) {
+  return { level: data.player.level, playTime: data.playTime, savedAt: data.savedAt, seed: data.seed };
 }
 
 function clone(value) {

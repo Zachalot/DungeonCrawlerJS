@@ -906,6 +906,82 @@ body {
   color: var(--danger);
 }
 
+/* Accounts */
+.auth-form {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 8px;
+  padding: 14px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.auth-form input {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.auth-form p {
+  margin: -4px 0 2px;
+}
+
+.auth-links {
+  margin: 6px 0 18px;
+  color: var(--text-dim);
+}
+
+.link {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.guest-choice,
+.account-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.account-bar {
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.conflict-copies {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.conflict-copy h4 {
+  margin: 0 0 2px;
+  font-size: 13px;
+}
+
+.guest-save {
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+
+.import select {
+  max-width: 100%;
+}
+
 .save-indicator {
   position: fixed;
   right: 14px;
