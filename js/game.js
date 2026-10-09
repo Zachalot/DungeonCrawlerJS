@@ -89,6 +89,9 @@ export class Game {
     this.grave = null; // { x, y, equipment, items, arrows }; at most one
     this.playTime = 0; // s, unpaused
 
+    this.godMode = false; // dev panel: take no damage
+    this.showHitboxes = false; // dev panel: draw collision boxes and aggro radii
+
     this.fog = new Fog(); // overworld exploration; saved
     this.dungeonFog = new Fog(); // current dungeon only; reset on each visit
     this.lastRevealKey = null;
@@ -252,7 +255,7 @@ export class Game {
   /** Applies armor and i-frames; returns the damage actually taken. */
   damagePlayer(rawDamage) {
     const player = this.player;
-    if (player.iframes > 0) return 0;
+    if (player.iframes > 0 || this.godMode) return 0;
     player.lastCombatTime = this.time;
 
     const taken = mitigate(rawDamage, player.armor, this.random);

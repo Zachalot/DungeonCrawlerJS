@@ -1,4 +1,5 @@
 import { CHUNK_SIZE, TILE_SIZE } from "./config.js";
+import { WEAPONS } from "./data/weapons.js";
 import { Tile } from "./world/tiles.js";
 import { VILLAGE_CENTER_TILE, VILLAGE_NPCS, VILLAGE_ORIGIN } from "./world/village.js";
 
@@ -342,6 +343,35 @@ export function drawGraveArrow(ctx, game, alpha, camera) {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   drawLabel(ctx, `Grave · ${tiles}`, ax, ay + 12, COLORS.graveArrow);
+}
+
+/**
+ * Dev overlay: collision boxes for the player and zombies, zombie aggro (yellow) and attack
+ * (red) radii, the sword's reach, and projectile radii.
+ */
+export function drawHitboxes(ctx, game, alpha, camera) {
+  if (!game.showHitboxes) return;
+  const circle = (x, y, r, color) => {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.arc(x - camera.x, y - camera.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+  const box = (x, y, half, color) => {
+    ctx.strokeStyle = color;
+    ctx.strokeRect(x - half - camera.x, y - half - camera.y, half * 2, half * 2);
+  };
+  ctx.lineWidth = 1;
+  const p = game.player.renderPosition(alpha);
+  box(p.x, p.y, game.player.half, "#38bdf8");
+  circle(p.x, p.y, WEAPONS.sword.range * T, "rgba(56, 189, 248, 0.5)");
+  for (const z of game.zombies) {
+    const pos = z.renderPosition(alpha);
+    box(pos.x, pos.y, z.half, "#4ade80");
+    circle(pos.x, pos.y, z.def.aggroRadius * T, "rgba(250, 204, 21, 0.35)");
+    circle(pos.x, pos.y, z.def.attackRange * T, "rgba(239, 68, 68, 0.6)");
+  }
+  for (const pr of game.projectiles) circle(pr.x, pr.y, pr.radius, "#f472b6");
 }
 
 /** Torchlight: darkens a dungeon except for a soft circle around the player. */

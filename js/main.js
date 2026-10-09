@@ -8,6 +8,7 @@ import {
   drawEffects,
   drawEntities,
   drawGraveArrow,
+  drawHitboxes,
   drawInteractions,
   drawLabels,
   drawProjectiles,
@@ -17,6 +18,7 @@ import { randomSeed } from "./rng.js";
 import { SaveStore, restoreGame } from "./save.js";
 import { CharacterSheet } from "./ui/character.js";
 import { ChestPanel } from "./ui/chest.js";
+import { DevPanel, devPanelEnabled } from "./ui/devPanel.js";
 import { Hud } from "./ui/hud.js";
 import { InventoryPanel } from "./ui/inventory.js";
 import { MapPanel, Minimap } from "./ui/maps.js";
@@ -75,6 +77,7 @@ const panels = {
 };
 const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory", KeyM: "map" };
 const minimap = new Minimap(document.getElementById("minimap"));
+const devPanel = devPanelEnabled(location) ? new DevPanel(document.getElementById("dev-panel"), getGame) : null;
 let activePanel = null;
 
 const wheel = new QuickWheel(document.getElementById("quick-wheel"), getGame);
@@ -110,7 +113,7 @@ requestAnimationFrame(frame);
 function startGame(newSlot, newGame) {
   slot = newSlot;
   game = newGame;
-  window.game = game; // console debugging until the M7 dev panel
+  window.game = game; // console debugging, alongside the dev panel (`)
   accumulator = 0;
   title.hide();
   gameUi.hidden = false;
@@ -119,6 +122,7 @@ function startGame(newSlot, newGame) {
 
 function showTitle() {
   wheel.cancel();
+  devPanel?.hide();
   game = null;
   slot = null;
   gameUi.hidden = true;
@@ -190,12 +194,14 @@ function frame(now) {
   drawDarkness(ctx, game, alpha, camera);
   drawLabels(ctx, game, camera);
   drawInteractions(ctx, game, camera);
+  drawHitboxes(ctx, game, alpha, camera);
   drawGraveArrow(ctx, game, alpha, camera);
   hud.update(frameTime, game);
   minimap.update(frameTime, game);
 }
 
 function handlePresses(pressed, released) {
+  if (pressed.has("Backquote") && devPanel) devPanel.toggle();
   if (wheel.isOpen && handleWheel(pressed, released)) return;
   if (pressed.has("Escape")) {
     if (activePanel) closePanel();

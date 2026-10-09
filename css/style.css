@@ -264,6 +264,34 @@ body {
   }
 }
 
+/* Dev panel (`): floats on the left, under the debug readout. Doesn't pause the game. */
+.dev-panel {
+  position: fixed;
+  top: 210px;
+  left: 12px;
+  z-index: 15;
+  width: 300px;
+}
+
+.dev-panel[hidden] {
+  display: none;
+}
+
+.dev-header {
+  margin-bottom: 8px;
+}
+
+.dev-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 5px;
+}
+
+.btn.toggle.on {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+
 /* Top-right: minimap with the controls hint underneath. */
 #map-corner {
   position: fixed;
