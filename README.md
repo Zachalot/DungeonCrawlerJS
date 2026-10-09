@@ -30,7 +30,7 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 |---|---|---|---|
 | Sword | STR × 1 | free | 90° cleave with 1.7-tile reach, knockback, 0.4 s |
 | Bow | floor(DEX × 1.5) | 1 arrow | 8-tile range, 0.6 s |
-| Staff | floor(INT × 1.5) | 5 mana | 7-tile range, 0.8 s |
+| Staff | INT × 3 | 5 mana | 7-tile range, 0.8 s. Hits hard, but mana only regenerates in the village, so bring mana potions |
 
 - **Zombies** have 10 HP and deal 2 damage. Watch for the red windup: stepping back before it ends dodges the hit. They can't enter the village.
 - **Leveling:** zombies give 10 XP plus a chance of gold and arrows. Each level needs `50 × level` XP and grants 3 stat points.

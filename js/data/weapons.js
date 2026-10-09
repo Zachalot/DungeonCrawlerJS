@@ -32,7 +32,8 @@ export const WEAPONS = Object.freeze({
     name: "Staff",
     key: "Digit3",
     stat: "int",
-    multiplier: 1.5,
+    multiplier: 3, // high damage, paid for in mana: there's no mana regen outside the village
+
     cooldown: 0.8,
     kind: "projectile",
     projectile: "fireball",

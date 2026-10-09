@@ -6,7 +6,7 @@ import { Panel } from "./panel.js";
 
 const STAT_INFO = {
   str: { name: "Strength", effect: "Sword damage ×1" },
-  int: { name: "Intellect", effect: "Fireball damage ×1.5, mana ×10" },
+  int: { name: "Intellect", effect: "Fireball damage ×3, mana ×10" },
   dex: { name: "Dexterity", effect: "Arrow damage ×1.5" },
   end: { name: "Endurance", effect: "Max HP ×10" },
 };

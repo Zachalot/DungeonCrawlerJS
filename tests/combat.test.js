@@ -91,11 +91,11 @@ describe("stats", () => {
     assert.equal(maxMana(STARTING_STATS), 50);
     assert.equal(weaponDamage(WEAPONS.sword, STARTING_STATS), 5);
     assert.equal(weaponDamage(WEAPONS.bow, STARTING_STATS), 7);
-    assert.equal(weaponDamage(WEAPONS.staff, STARTING_STATS), 7);
+    assert.equal(weaponDamage(WEAPONS.staff, STARTING_STATS), 15); // INT × 3
   });
 
   it("floors fractional damage", () => {
-    assert.equal(weaponDamage(WEAPONS.staff, { int: 7 }), 10); // 10.5
+    assert.equal(weaponDamage(WEAPONS.bow, { dex: 7 }), 10); // 10.5
   });
 });
 
@@ -292,12 +292,12 @@ describe("regen", () => {
     assert.deepEqual([village.hp, village.mana], [15, 15]); // 10%/s of 50
 
     const idle = playerAt(10, 10);
-    applyRegen(idle, 1, { inVillage: false, inCombat: false });
-    assert.deepEqual([idle.hp, idle.mana], [10, 11]); // 0.5 HP banked, 1 mana
+    applyRegen(idle, 2, { inVillage: false, inCombat: false });
+    assert.deepEqual([idle.hp, idle.mana], [11, 10]); // 1% HP/s; no mana outside the village
 
     const combat = playerAt(10, 10);
-    for (let i = 0; i < 60 * 5; i++) applyRegen(combat, 1 / 60, { inVillage: false, inCombat: true });
-    assert.deepEqual([combat.hp, combat.mana], [10, 11]); // no HP; 0.25 mana/s → 1.25
+    for (let i = 0; i < 60 * 30; i++) applyRegen(combat, 1 / 60, { inVillage: false, inCombat: true });
+    assert.deepEqual([combat.hp, combat.mana], [10, 10]); // nothing regenerates in combat
   });
 
   it("never exceeds max", () => {

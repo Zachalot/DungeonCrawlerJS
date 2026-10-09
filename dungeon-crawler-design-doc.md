@@ -60,11 +60,13 @@ The player carries all three weapons and swaps between them instantly; weapons a
 | Stat | Effect |
 |---|---|
 | **Strength (STR)** | Sword damage = `STR × 1` |
-| **Intellect (INT)** | Fireball damage = `floor(INT × 1.5)`; Max Mana = `INT × 10` |
+| **Intellect (INT)** | Fireball damage = `INT × 3`; Max Mana = `INT × 10` |
 | **Dexterity (DEX)** | Arrow damage = `floor(DEX × 1.5)`; reserved for a future dodge mechanic |
 | **Endurance (END)** | Max HP = `END × 10` |
 
-**Starting stats:** 5 in each stat → 50 HP, 50 Mana, Sword 5, Fireball 7, Arrow 7.
+**Starting stats:** 5 in each stat → 50 HP, 50 Mana, Sword 5, Fireball 15, Arrow 7.
+
+**Magic balance (issue #7):** the staff hits far harder than the sword or bow, but mana doesn't regenerate outside the village. Out in the world, mana comes only from potions, level-ups, and respawning. Magic is a potion budget, so a mage still needs Strength or Dexterity to carry them between refills. Deciding how much to invest in each is meant to be a core build choice.
 
 **Rounding rule:** use `floor()` for every derived value that can produce a fraction, and apply it once, at the end of the calculation. The only exception is armor mitigation, which uses probabilistic rounding (§6).
 
@@ -84,7 +86,7 @@ The player carries all three weapons and swaps between them instantly; weapons a
 | Resource | In combat | Out of combat (no damage dealt or taken for 5 s) | In village |
 |---|---|---|---|
 | HP | none | 1% of max / s | 10% of max / s |
-| Mana | 0.5% of max / s | 2% of max / s | 10% of max / s |
+| Mana | none | none | 10% of max / s |
 
 Potions are the burst refill. Regen is tracked as a fractional accumulator, while displayed and stored values are whole numbers.
 
@@ -98,7 +100,7 @@ Potions are the burst refill. Regen is tracked as a fractional accumulator, whil
 |---|---|---|---|---|---|
 | **Sword** | `STR × 1` | None | Melee, 90° arc in front, 1.7 tiles (reaches any zombie whose body overlaps the arc) | 0.4 s | **Cleave** (hits every enemy in the arc) + **knockback** 0.5 tiles |
 | **Bow** | `floor(DEX × 1.5)` | 1 arrow | Projectile, ~8 tiles | 0.6 s | Can't fire with 0 arrows ("No arrows!" toast) |
-| **Staff** | `floor(INT × 1.5)` | 5 mana | Projectile, ~7 tiles | 0.8 s | Can't cast with < 5 mana ("Not enough mana" toast) |
+| **Staff** | `INT × 3` | 5 mana | Projectile, ~7 tiles | 0.8 s | Can't cast with < 5 mana ("Not enough mana" toast) |
 
 - **Attack input:** every click or Space press counts, even a tap released before the next frame. It fires on the next simulation step (≤16 ms) if the weapon is ready. A press during the last 0.2 s of a cooldown is buffered and fires the instant the cooldown ends. Earlier presses are dropped, so a stale click never fires late. Holding the button attacks on every cooldown.
 - Projectiles are stopped by rocks, trees, and walls, and hit the first enemy in their path.
@@ -234,7 +236,7 @@ Chest contents are rolled once when the chest is first opened, and the result is
 | XP | 10 |
 | Drops | 60% chance: 1–3 g; 10% chance: 2–5 arrows. Auto-collected on kill, with no ground items. |
 
-**Starting balance:** at 2 damage, a fresh player (50 HP, no armor) survives 25 hits. Starting weapons kill a zombie in 2 hits (sword at 5 damage, fireball and arrow at 7 damage).
+**Starting balance:** at 2 damage, a fresh player (50 HP, no armor) survives 25 hits. The starting sword and bow kill a zombie in 2 hits (5 and 7 damage). A fireball (15) kills one in a single hit, but a full 50-mana bar is only 10 casts.
 
 **AI states:**
 - `idle`: wander within 3 tiles of spawn.
