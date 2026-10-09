@@ -1,12 +1,14 @@
 import { ITEMS, SLOT_NAMES } from "../data/items.js";
+import { WEAPONS } from "../data/weapons.js";
 import { damageReduction } from "../systems/combat.js";
+import { weaponDamage } from "../systems/stats.js";
 
-const SLOT_GLYPHS = { helmet: "H", chest: "C", legs: "L", gloves: "G", boots: "B" };
+const SLOT_GLYPHS = { helmet: "H", chest: "C", legs: "L", gloves: "G", boots: "B", sword: "Sw", bow: "Bo", staff: "St" };
 
 /** Icon markup for an item instance (or a bare defId). `attrs` adds data attributes for click handling. */
 export function itemIcon(defId, qty = 1, attrs = "") {
   const def = ITEMS[defId];
-  const glyph = def.type === "armor" ? SLOT_GLYPHS[def.slot] : def.resource === "hp" ? "♥" : "◆";
+  const glyph = def.slot ? SLOT_GLYPHS[def.slot] : def.resource === "hp" ? "♥" : "◆";
   const classes = ["item-icon", `type-${def.type}`];
   if (def.tier) classes.push(`tier-${def.tier}`);
   if (def.resource) classes.push(`res-${def.resource}`, def.effect.percent ? "greater" : "minor");
@@ -17,31 +19,43 @@ export function itemIcon(defId, qty = 1, attrs = "") {
 
 /**
  * A grid of slots; empty slots render as blanks. `attrsFor(i)` supplies per-item data
- * attributes; `gridAttrs` goes on the grid itself (e.g. a drop-zone marker).
+ * attributes, `emptyAttrsFor(i)` the same for empty slots (e.g. drop targets), and
+ * `gridAttrs` goes on the grid itself.
  */
-export function slotGrid(slots, attrsFor, gridAttrs = "") {
+export function slotGrid(slots, attrsFor, gridAttrs = "", emptyAttrsFor = () => "") {
   return `<div class="slot-grid" ${gridAttrs}>${slots
-    .map((slot, i) => (slot ? itemIcon(slot.defId, slot.qty, attrsFor(i)) : `<div class="item-icon empty"></div>`))
+    .map((slot, i) => (slot ? itemIcon(slot.defId, slot.qty, attrsFor(i)) : `<div class="item-icon empty" ${emptyAttrsFor(i)}></div>`))
     .join("")}</div>`;
 }
 
-/** Tooltip text lines for an item, comparing armor against what the player has equipped. */
+/** Tooltip text lines for an item, comparing armor or weapon bonus against what the player has equipped. */
 export function describeItem(defId, player, { price } = {}) {
   const def = ITEMS[defId];
   const lines = [`<strong class="tier-text-${def.tier ?? def.type}">${def.name}</strong>`];
   if (def.type === "armor") {
-    lines.push(`<span class="dim">Armor · ${SLOT_NAMES[def.slot]}</span>`);
-    const equipped = player.equipment[def.slot];
-    const delta = def.armor - (equipped ? ITEMS[equipped.defId].armor : 0);
-    const compare =
-      equipped?.defId === defId ? "" : delta > 0 ? ` <span class="gain">(+${delta})</span>` : delta < 0 ? ` <span class="loss">(${delta})</span>` : " (same)";
-    lines.push(`Armor ${def.armor}${compare}`);
+    lines.push(`<span class="dim">Armor · ${SLOT_NAMES[def.slot]} slot</span>`);
+    lines.push(`Armor ${def.armor}${compareTo(def, player, "armor")}`);
+  } else if (def.type === "weapon") {
+    const weapon = WEAPONS[def.slot];
+    lines.push(`<span class="dim">Weapon · ${SLOT_NAMES[def.slot]} slot</span>`);
+    lines.push(`Damage ${weapon.stat.toUpperCase()} × ${weapon.multiplier} + ${def.weaponBonus}${compareTo(def, player, "weaponBonus")}`);
+    lines.push(`<span class="dim">Now ${weaponDamage(weapon, player.stats, { defId })} per hit</span>`);
   } else {
     const what = def.resource === "hp" ? "HP" : "mana";
     lines.push(def.effect.flat ? `Restores ${def.effect.flat} ${what}` : `Restores ${def.effect.percent * 100}% of max ${what}`);
   }
   lines.push(price === undefined ? `<span class="dim">Sells for ${def.sellPrice} g</span>` : `<span class="gold-text">${price} g</span>`);
   return lines.join("<br>");
+}
+
+// " (+3)" / " (-2)" / " (same)" versus the item in the same slot; "" if this is the equipped one.
+function compareTo(def, player, field) {
+  const equipped = player.equipment[def.slot];
+  if (equipped?.defId === def.id) return "";
+  const delta = def[field] - (equipped ? ITEMS[equipped.defId][field] : 0);
+  if (delta > 0) return ` <span class="gain">(+${delta})</span>`;
+  if (delta < 0) return ` <span class="loss">(${delta})</span>`;
+  return " (same)";
 }
 
 export function armorSummary(armor) {

@@ -9,18 +9,18 @@ import {
   TILE_SIZE,
 } from "./config.js";
 import { ENEMIES } from "./data/enemies.js";
-import { STARTING_ITEMS } from "./data/items.js";
+import { ITEMS, SLOT_NAMES, STARTER_WEAPONS, STARTING_ITEMS } from "./data/items.js";
 import { VENDORS } from "./data/vendors.js";
 import { WEAPONS } from "./data/weapons.js";
 import { Player } from "./entities/player.js";
 import { Projectile } from "./entities/projectile.js";
 import { Zombie } from "./entities/zombie.js";
 import { isInArc, mitigate } from "./systems/combat.js";
-import { drinkBestPotion } from "./systems/consumables.js";
+import { drinkPotion } from "./systems/consumables.js";
 import { buryGear, isGraveEmpty, recoverGrave } from "./systems/death.js";
 import { buyEntry, repurchase, sellFromSlot } from "./systems/economy.js";
 import { Effects } from "./systems/effects.js";
-import { addInstance, addItem, createSlots, equipFromInventory, unequip } from "./systems/inventory.js";
+import { addInstance, addItem, createSlots, equipFromInventory, equipToSlot, moveInBag, unequip } from "./systems/inventory.js";
 import { allocatePoints, grantXp, respec, respecCost } from "./systems/leveling.js";
 import { collectDrops, rollChestLoot, rollDrops } from "./systems/loot.js";
 import { applyRegen } from "./systems/regen.js";
@@ -43,6 +43,8 @@ export const TextColor = Object.freeze({
   heal: "#4ade80",
   mana: "#60a5fa",
 });
+
+const NO_WEAPON_RETRY = 0.5; // s between "no weapon equipped" reminders while attack is held
 
 const PURCHASE_FAILURES = {
   gold: "Not enough gold",
@@ -77,6 +79,7 @@ export class Game {
     this.stash = { gold: 0, items: createSlots(STASH_SIZE) };
     this.buyback = []; // recently sold items; not saved
     for (const { defId, qty } of STARTING_ITEMS) addItem(this.player.inventory, defId, qty, this.newUid);
+    this.equipStarterWeapons();
 
     this.dungeonState = new Map(); // dungeon id → { cleared, chest: { gold, items } | null }
     this.overworldZombies = null; // parked while the player is in a dungeon
@@ -145,10 +148,16 @@ export class Game {
   attack() {
     const player = this.player;
     const weapon = WEAPONS[player.weapon];
+    const equipped = player.equipment[player.weapon];
+    if (!equipped) {
+      player.attackCooldown = NO_WEAPON_RETRY;
+      this.toast(`No ${weapon.name.toLowerCase()} equipped. Equip one in your inventory (I).`);
+      return;
+    }
     player.attackCooldown = weapon.cooldown;
 
     if (weapon.kind === "melee") {
-      this.swingSword(weapon);
+      this.swingSword(weapon, equipped);
       return;
     }
     if (weapon.arrowCost && player.arrows < weapon.arrowCost) {
@@ -172,15 +181,15 @@ export class Game {
         speed: weapon.projectileSpeed * T,
         range: weapon.range * T,
         radius: weapon.projectileRadius,
-        damage: weaponDamage(weapon, player.stats),
+        damage: weaponDamage(weapon, player.stats, equipped),
       }),
     );
   }
 
-  swingSword(weapon) {
+  swingSword(weapon, equipped) {
     const player = this.player;
     const arc = (weapon.arcDegrees * Math.PI) / 180;
-    const damage = weaponDamage(weapon, player.stats);
+    const damage = weaponDamage(weapon, player.stats, equipped);
     this.effects.addSwing(player.x, player.y, player.aimAngle, weapon.range * T, arc);
 
     for (const zombie of this.zombies) {
@@ -450,17 +459,17 @@ export class Game {
 
   // ---- Items and economy --------------------------------------------------
 
-  /** Q/E: drinks the best potion for "hp" or "mana", with feedback. */
-  drinkPotion(resource) {
-    const result = drinkBestPotion(this.player, resource);
-    const label = resource === "hp" ? "health" : "mana";
+  /** Drinks one potion of type `defId` (from the quick wheel or the inventory), with feedback. */
+  drinkPotion(defId) {
+    const def = ITEMS[defId];
+    const result = drinkPotion(this.player, defId);
     if (result.ok) {
-      const color = resource === "hp" ? TextColor.heal : TextColor.mana;
+      const color = def.resource === "hp" ? TextColor.heal : TextColor.mana;
       this.effects.addText(this.player.x, this.player.y - this.player.half, `+${result.restored}`, color);
     } else if (result.reason === "none") {
-      this.toast(`No ${label} potions`);
+      this.toast(`You have no ${def.name}s`);
     } else if (result.reason === "full") {
-      this.toast(resource === "hp" ? "Already at full health" : "Already at full mana");
+      this.toast(def.resource === "hp" ? "Already at full health" : "Already at full mana");
     } else if (result.reason === "cooldown") {
       this.toast("Potions are on cooldown");
     }
@@ -471,10 +480,35 @@ export class Game {
     return equipFromInventory(this.player, inventoryIndex);
   }
 
-  unequip(slot) {
-    if (unequip(this.player, slot)) return true;
+  /** Equips a bag item into a specific slot (drag and drop); explains a wrong slot. */
+  equipToSlot(inventoryIndex, slot) {
+    const instance = this.player.inventory[inventoryIndex];
+    const result = equipToSlot(this.player, inventoryIndex, slot);
+    if (result.reason === "wrong-slot") {
+      const def = ITEMS[instance.defId];
+      this.toast(`${def.name} goes in the ${SLOT_NAMES[def.slot]} slot, not ${SLOT_NAMES[slot]}.`);
+    } else if (result.reason === "not-equippable") {
+      this.toast(`${ITEMS[instance.defId].name} can't be equipped.`);
+    }
+    return result.ok;
+  }
+
+  /** Takes off an equipped piece, into `bagIndex` if it's free. */
+  unequip(slot, bagIndex = null) {
+    if (unequip(this.player, slot, bagIndex)) return true;
     if (this.player.equipment[slot]) this.toast("Inventory full");
     return false;
+  }
+
+  moveInBag(from, to) {
+    return moveInBag(this.player.inventory, from, to);
+  }
+
+  /** Fills any empty weapon slot with a fresh starter weapon. */
+  equipStarterWeapons() {
+    for (const [slot, defId] of Object.entries(STARTER_WEAPONS)) {
+      if (!this.player.equipment[slot]) this.player.equipment[slot] = { uid: this.newUid(), defId, qty: 1 };
+    }
   }
 
   /** Buys one entry from a vendor's stock list. */
@@ -586,6 +620,7 @@ export class Game {
     const lostPrevious = this.grave !== null;
     const grave = { ...where, ...buryGear(player) };
     this.grave = isGraveEmpty(grave) ? null : grave;
+    this.equipStarterWeapons(); // never respawn helpless
 
     this.exitDungeon({ toVillage: true });
     player.teleport(VILLAGE_SPAWN.x, VILLAGE_SPAWN.y);

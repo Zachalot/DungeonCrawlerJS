@@ -21,6 +21,7 @@ import { Hud } from "./ui/hud.js";
 import { InventoryPanel } from "./ui/inventory.js";
 import { Tooltip } from "./ui/items.js";
 import { PauseMenu } from "./ui/pause.js";
+import { QuickWheel } from "./ui/quickWheel.js";
 import { StashPanel } from "./ui/stash.js";
 import { TitleScreen } from "./ui/title.js";
 import { Toasts } from "./ui/toast.js";
@@ -73,6 +74,9 @@ const panels = {
 const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory" };
 let activePanel = null;
 
+const wheel = new QuickWheel(document.getElementById("quick-wheel"), getGame);
+let wheelAim = { x: 0, y: 0 }; // aim frozen while the wheel is open
+
 const title = new TitleScreen(document.getElementById("title"), store, {
   defaultSeed: seedFromUrl(),
   onContinue: (s) => startGame(s, restoreGame(store.load(s))),
@@ -111,6 +115,7 @@ function startGame(newSlot, newGame) {
 }
 
 function showTitle() {
+  wheel.cancel();
   game = null;
   slot = null;
   gameUi.hidden = true;
@@ -148,10 +153,11 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (!game) {
     input.consumePressed();
+    input.consumeReleased();
     input.consumeAttackPress();
     return;
   }
-  handlePresses(input.consumePressed());
+  handlePresses(input.consumePressed(), input.consumeReleased());
   if (!game) return; // quit to title from a key press
 
   if (activePanel) {
@@ -185,7 +191,8 @@ function frame(now) {
   hud.update(frameTime, game);
 }
 
-function handlePresses(pressed) {
+function handlePresses(pressed, released) {
+  if (wheel.isOpen && handleWheel(pressed, released)) return;
   if (pressed.has("Escape")) {
     if (activePanel) closePanel();
     else openPanel("pause");
@@ -202,11 +209,37 @@ function handlePresses(pressed) {
     const panel = game.interact();
     if (panel && panels[panel]) openPanel(panel);
   }
-  if (pressed.has("KeyQ")) game.drinkPotion("hp");
-  if (pressed.has("KeyE")) game.drinkPotion("mana");
+  if (pressed.has("KeyQ") && !wheel.isOpen) {
+    wheelAim = camera.screenToWorld(input.mouse.x, input.mouse.y);
+    wheel.open(input.mouse.x, input.mouse.y);
+  }
+}
+
+/**
+ * While the wheel is open: releasing Q drinks the highlighted potion (or cancels in the
+ * middle), Esc cancels, and anything else just tracks the mouse. Returns true if the
+ * press was consumed (Esc shouldn't also open the pause menu).
+ */
+function handleWheel(pressed, released) {
+  if (pressed.has("Escape")) {
+    wheel.cancel();
+    return true;
+  }
+  if (released.has("KeyQ")) {
+    const choice = wheel.confirm();
+    if (choice) game.drinkPotion(choice);
+    return false;
+  }
+  if (!input.keys.has("KeyQ")) {
+    wheel.cancel(); // Q was lost without a keyup, e.g. the window lost focus
+    return false;
+  }
+  wheel.update(input.mouse.x, input.mouse.y);
+  return false;
 }
 
 function openPanel(id) {
+  wheel.cancel();
   if (activePanel) panels[activePanel].close();
   activePanel = id;
   input.mouse.down = false; // the click that opened a panel must not become an attack
@@ -234,11 +267,14 @@ function syncCamera(alpha) {
 }
 
 function readControls() {
+  // The mouse belongs to the quick wheel while it's open: no attacks, and aim stays put.
+  const wheelOpen = wheel.isOpen;
+  const attackPressed = input.consumeAttackPress();
   return {
     move: input.moveVector(),
-    aim: camera.screenToWorld(input.mouse.x, input.mouse.y),
-    attack: input.isAttacking(),
-    attackPressed: input.consumeAttackPress(),
+    aim: wheelOpen ? wheelAim : camera.screenToWorld(input.mouse.x, input.mouse.y),
+    attack: !wheelOpen && input.isAttacking(),
+    attackPressed: !wheelOpen && attackPressed,
     weapon: WEAPON_ORDER.find((id) => input.keys.has(WEAPONS[id].key)) ?? null,
   };
 }

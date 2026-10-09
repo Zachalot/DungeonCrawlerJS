@@ -37,17 +37,19 @@ export class Hud {
     for (const slot of this.slots) {
       const { weapon } = slot;
       const active = player.weapon === weapon.id;
+      const equipped = player.equipment[weapon.id];
       slot.element.classList.toggle("active", active);
-      this.setText(slot.damage, `${weaponDamage(weapon, player.stats)} dmg`);
+      slot.element.classList.toggle("unequipped", !equipped);
+      this.setText(slot.damage, equipped ? `${weaponDamage(weapon, player.stats, equipped)} dmg` : "none equipped");
       this.setText(slot.cost, costLabel(weapon, player));
-      slot.element.classList.toggle("empty", isOutOfAmmo(weapon, player));
+      slot.element.classList.toggle("empty", !equipped || isOutOfAmmo(weapon, player));
       const cooldown = active ? player.attackCooldown / weapon.cooldown : 0;
       slot.cooldown.style.transform = `scaleY(${cooldown})`;
     }
 
     const hpPotions = POTION_PRIORITY.hp.reduce((n, id) => n + countItem(player.inventory, id), 0);
     const manaPotions = POTION_PRIORITY.mana.reduce((n, id) => n + countItem(player.inventory, id), 0);
-    this.setText(this.potions, `Q ♥ ${hpPotions}   E ◆ ${manaPotions}`);
+    this.setText(this.potions, `Hold Q   ♥ ${hpPotions}   ◆ ${manaPotions}`);
     this.potions.classList.toggle("cooling", player.potionCooldown > 0);
 
     this.updateDebug(frameTime, game);

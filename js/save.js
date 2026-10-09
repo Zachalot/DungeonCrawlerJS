@@ -1,11 +1,11 @@
 import { INVENTORY_SIZE, STASH_SIZE } from "./config.js";
-import { ARMOR_SLOTS, ITEMS } from "./data/items.js";
+import { EQUIP_SLOTS, ITEMS, STARTER_WEAPONS } from "./data/items.js";
 import { WEAPONS } from "./data/weapons.js";
 import { Game } from "./game.js";
 import { STAT_KEYS } from "./systems/leveling.js";
 import { dungeonForCell } from "./world/dungeons.js";
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SLOT_COUNT = 3;
 const KEY_PREFIX = "dungeonCrawler.slot";
 const SIZE_WARNING_BYTES = 1024 * 1024;
@@ -14,7 +14,18 @@ const SIZE_WARNING_BYTES = 1024 * 1024;
  * Upgrades from version N to N + 1, keyed by N. Add one entry whenever the save shape
  * changes, and bump SAVE_VERSION; old saves then upgrade step by step on load.
  */
-export const MIGRATIONS = Object.freeze({});
+export const MIGRATIONS = Object.freeze({
+  // v2: weapons became items with three equipment slots. Arm v1 characters with starters.
+  1: (save) => {
+    let nextUid = save.nextUid;
+    const equipment = { ...save.player.equipment };
+    for (const [slot, defId] of Object.entries(STARTER_WEAPONS)) {
+      equipment[slot] = equipment[slot] ?? { uid: `i${nextUid++}`, defId, qty: 1 };
+    }
+    const grave = save.grave && { ...save.grave, equipment: { sword: null, bow: null, staff: null, ...save.grave.equipment } };
+    return { ...save, version: 2, nextUid, player: { ...save.player, equipment }, grave };
+  },
+});
 
 // ---- Serialization ----------------------------------------------------------
 
@@ -111,11 +122,15 @@ export function validateSave(data) {
   }
   if (!STAT_KEYS.every((k) => Number.isInteger(p.stats?.[k]))) fail("player.stats");
   if (!Array.isArray(p.inventory) || p.inventory.length !== INVENTORY_SIZE) fail("player.inventory");
-  if (!ARMOR_SLOTS.every((slot) => slot in (p.equipment ?? {}))) fail("player.equipment");
+  if (!EQUIP_SLOTS.every((slot) => slot in (p.equipment ?? {}))) fail("player.equipment");
   if (!["overworld", "dungeon"].includes(p.location?.type)) fail("player.location");
   if (!Array.isArray(data.stash?.items) || data.stash.items.length !== STASH_SIZE) fail("stash");
   for (const instance of [...p.inventory, ...Object.values(p.equipment), ...data.stash.items]) {
     if (instance && !ITEMS[instance.defId]) fail(`unknown item ${instance.defId}`);
+  }
+  for (const slot of EQUIP_SLOTS) {
+    const piece = p.equipment[slot];
+    if (piece && ITEMS[piece.defId].slot !== slot) fail(`${piece.defId} equipped in the ${slot} slot`);
   }
   if (typeof data.dungeons !== "object" || data.dungeons === null) fail("dungeons");
   return data;

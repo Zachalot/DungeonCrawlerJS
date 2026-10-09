@@ -1,4 +1,4 @@
-import { ARMOR_SLOTS, ITEMS } from "../data/items.js";
+import { ARMOR_SLOTS, EQUIP_SLOTS, ITEMS } from "../data/items.js";
 
 // Slot arrays hold { uid, defId, qty } or null. `newUid` is a () => string supplied by the game.
 
@@ -74,8 +74,9 @@ export function freeSlotCount(slots) {
   return slots.filter((s) => s === null).length;
 }
 
+/** Empty equipment: five armor slots and three weapon slots. */
 export function createEquipment() {
-  return Object.fromEntries(ARMOR_SLOTS.map((slot) => [slot, null]));
+  return Object.fromEntries(EQUIP_SLOTS.map((slot) => [slot, null]));
 }
 
 /** Sum of armor across equipped pieces. */
@@ -83,23 +84,49 @@ export function totalArmor(equipment) {
   return ARMOR_SLOTS.reduce((sum, slot) => sum + (equipment[slot] ? ITEMS[equipment[slot].defId].armor : 0), 0);
 }
 
-/** Equips the armor in inventory slot `index`, swapping out whatever was in that equipment slot. */
+export function isEquippable(def) {
+  return def.type === "armor" || def.type === "weapon";
+}
+
+/** Equips the item in inventory slot `index` into its own slot, swapping out whatever was there. */
 export function equipFromInventory(player, index) {
+  const def = ITEMS[player.inventory[index]?.defId];
+  if (!def || !isEquippable(def)) return false;
+  return equipToSlot(player, index, def.slot).ok;
+}
+
+/**
+ * Equips inventory slot `index` into equipment `slot`, swapping the old piece into the bag slot.
+ * Returns { ok } or { ok: false, reason: "empty" | "not-equippable" | "wrong-slot" }.
+ */
+export function equipToSlot(player, index, slot) {
   const instance = player.inventory[index];
-  const def = instance && ITEMS[instance.defId];
-  if (!def || def.type !== "armor") return false;
-  player.inventory[index] = player.equipment[def.slot];
-  player.equipment[def.slot] = instance;
+  if (!instance) return { ok: false, reason: "empty" };
+  const def = ITEMS[instance.defId];
+  if (!isEquippable(def)) return { ok: false, reason: "not-equippable" };
+  if (def.slot !== slot) return { ok: false, reason: "wrong-slot" };
+  player.inventory[index] = player.equipment[slot];
+  player.equipment[slot] = instance;
+  return { ok: true };
+}
+
+/**
+ * Moves an equipped piece into the bag: into `bagIndex` if given and empty, otherwise the
+ * first free slot. Returns false if there's no room.
+ */
+export function unequip(player, slot, bagIndex = null) {
+  const instance = player.equipment[slot];
+  if (!instance) return false;
+  const target = bagIndex !== null && player.inventory[bagIndex] === null ? bagIndex : player.inventory.indexOf(null);
+  if (target === -1) return false;
+  player.inventory[target] = instance;
+  player.equipment[slot] = null;
   return true;
 }
 
-/** Moves an equipped piece into the first free inventory slot. Returns false if the inventory is full. */
-export function unequip(player, slot) {
-  const instance = player.equipment[slot];
-  if (!instance) return false;
-  const free = player.inventory.indexOf(null);
-  if (free === -1) return false;
-  player.inventory[free] = instance;
-  player.equipment[slot] = null;
+/** Moves a bag slot to another, swapping if the target is occupied. */
+export function moveInBag(slots, from, to) {
+  if (from === to || !slots[from]) return false;
+  [slots[from], slots[to]] = [slots[to], slots[from]];
   return true;
 }

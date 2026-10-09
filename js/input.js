@@ -12,6 +12,7 @@ export class Input {
   constructor(canvas) {
     this.keys = new Set();
     this.pressed = new Set(); // keys pressed since the last consumePressed()
+    this.released = new Set(); // keys released since the last consumeReleased()
     this.attackPressed = false; // a click or Space press not yet seen by the game
     this.mouse = { x: 0, y: 0, down: false }; // CSS px relative to the canvas
 
@@ -21,7 +22,10 @@ export class Input {
       if (!e.repeat) this.pressed.add(e.code);
       if (!e.repeat && e.code === "Space") this.attackPressed = true;
     });
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    window.addEventListener("keyup", (e) => {
+      this.keys.delete(e.code);
+      this.released.add(e.code);
+    });
     window.addEventListener("blur", () => {
       this.keys.clear();
       this.mouse.down = false;
@@ -59,6 +63,13 @@ export class Input {
     const pressed = this.pressed;
     this.pressed = new Set();
     return pressed;
+  }
+
+  /** Returns and clears the set of keys released since the last call. */
+  consumeReleased() {
+    const released = this.released;
+    this.released = new Set();
+    return released;
   }
 
   /** True once per click/Space press, even if released before the game's next step. */

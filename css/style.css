@@ -461,6 +461,20 @@ body {
   box-shadow: 0 0 6px rgba(125, 211, 252, 0.35);
 }
 
+.item-icon.tier-starter {
+  border-color: #78716c;
+  color: #d6d3d1;
+  font-size: 13px;
+}
+
+.tier-text-starter {
+  color: #d6d3d1;
+}
+
+.weapon-slot.unequipped {
+  opacity: 0.55;
+}
+
 .item-icon.res-hp {
   color: #f87171;
 }
@@ -508,15 +522,15 @@ body {
   flex-wrap: wrap;
 }
 
-.doll {
-  min-width: 180px;
+/* Let hint text wrap inside the column instead of pushing the column onto its own row. */
+.inventory-layout > div,
+.stash-layout > div {
+  flex: 1 1 0;
+  min-width: 240px;
 }
 
-.doll-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 5px;
+.inventory-layout > .figure-panel {
+  flex: 0 0 auto;
 }
 
 .gold-buttons {
@@ -526,10 +540,82 @@ body {
   margin-top: 8px;
 }
 
-.slot-grid.drop-target {
+/* Drag and drop states (ui/dragDrop.js) */
+.slot-grid.drop-valid {
   outline: 2px dashed var(--accent);
   outline-offset: 4px;
   border-radius: 4px;
+}
+
+.figure-slot.drop-valid .item-icon {
+  border-color: #4ade80;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.6);
+}
+
+.figure-slot.drop-invalid {
+  opacity: 0.45;
+}
+
+.item-icon.drop-hover,
+.figure-slot.drop-hover .item-icon {
+  border-color: #fbbf24;
+}
+
+.slot-grid.drop-hover {
+  outline-color: #fbbf24;
+}
+
+/* Inventory stick figure */
+.figure {
+  position: relative;
+  width: 240px;
+  height: 300px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  grid-template-areas:
+    "bow helmet staff"
+    "gloves chest sword"
+    ". legs ."
+    ". boots .";
+  place-items: center;
+}
+
+.stick-figure {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.figure-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.figure-label {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.item-icon.slot-empty {
+  background: rgba(0, 0, 0, 0.45);
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.item-icon.slot-empty span {
+  font-size: 8px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
 }
 
 .item-icon[draggable="true"] {
@@ -733,6 +819,89 @@ body {
   100% {
     opacity: 0;
   }
+}
+
+/* Quick-select wheel (hold Q) */
+.quick-wheel {
+  position: fixed;
+  z-index: 25;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.quick-wheel[hidden] {
+  display: none;
+}
+
+.wheel-ring {
+  position: absolute;
+  left: -120px;
+  top: -120px;
+  overflow: visible;
+}
+
+.wheel-ring .wedge {
+  fill: rgba(15, 18, 24, 0.82);
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 1.5;
+}
+
+.wheel-ring .wedge.hp.selected {
+  fill: rgba(220, 38, 38, 0.55);
+  stroke: #fca5a5;
+}
+
+.wheel-ring .wedge.mana.selected {
+  fill: rgba(37, 99, 235, 0.55);
+  stroke: #93c5fd;
+}
+
+.wheel-ring .wedge.none {
+  fill: rgba(15, 18, 24, 0.6);
+}
+
+.wheel-ring .wheel-center {
+  fill: rgba(0, 0, 0, 0.55);
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+.wheel-ring .wheel-center.selected {
+  stroke: #e5e7eb;
+}
+
+.wheel-item {
+  position: absolute;
+  left: -20px;
+  top: -26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wheel-item.none {
+  opacity: 0.35;
+}
+
+.wheel-item .item-icon {
+  cursor: default;
+}
+
+.wheel-count {
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px #000;
+}
+
+.wheel-caption {
+  position: absolute;
+  left: -40px;
+  top: -16px;
+  width: 80px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .warning a {

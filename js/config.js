@@ -54,11 +54,12 @@ export const POTION_COOLDOWN = 1; // s, shared by all potions
 export const RESPAWN_IFRAMES = 2; // s
 export const ARMOR_K = 50; // reduction = armor / (armor + ARMOR_K)
 
-// Regen as a fraction of max per second.
+// Regen as a fraction of max per second. Mana only refills in the village (or from potions,
+// level-ups, and respawning): that's the price of the staff's high damage.
 export const OUT_OF_COMBAT_DELAY = 5; // s without dealing or taking damage
 export const REGEN = Object.freeze({
-  combat: { hp: 0, mana: 0.005 },
-  idle: { hp: 0.01, mana: 0.02 },
+  combat: { hp: 0, mana: 0 },
+  idle: { hp: 0.01, mana: 0 },
   village: { hp: 0.1, mana: 0.1 },
 });
 
