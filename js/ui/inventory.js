@@ -1,4 +1,6 @@
+import { MATERIALS, RUNES } from "../data/enemies.js";
 import { EQUIP_SLOTS, ITEMS, SLOT_NAMES } from "../data/items.js";
+import { bonusChance, gatheringLevel } from "../systems/gathering.js";
 import { isEquippable } from "../systems/inventory.js";
 import { DragDrop, parseDragId } from "./dragDrop.js";
 import { armorSummary, itemIcon, slotGrid } from "./items.js";
@@ -27,9 +29,10 @@ export function classifyInventoryDrop(source, target, player) {
 }
 
 /**
- * Inventory (I): a stick figure with eight equipment slots, plus the 24-slot bag.
- * Drag gear onto the figure (or click it) to equip it, drag it back to take it off, or
- * drag between bag cells to rearrange. Clicking a potion drinks it.
+ * Inventory (I): a stick figure with eight equipment slots, the 24-slot bag, and the pouch
+ * (materials, runes, Gathering skill). Drag gear onto the figure (or click it) to equip it, drag
+ * it back to take it off, or drag between bag cells to rearrange. Clicking a potion drinks it;
+ * a travel potion opens the travel menu (callbacks.onOpenPanel).
  */
 export class InventoryPanel extends Panel {
   constructor(...args) {
@@ -62,7 +65,13 @@ export class InventoryPanel extends Panel {
     if (action === "use") {
       const def = ITEMS[game.player.inventory[Number(index)]?.defId];
       if (def && isEquippable(def)) game.equip(Number(index));
-      else if (def?.type === "consumable") game.drinkPotion(def.id);
+      else if (def?.type === "consumable") {
+        const panel = game.drinkPotion(def.id);
+        if (panel) {
+          this.callbacks.onOpenPanel(panel, { defId: def.id });
+          return false;
+        }
+      }
     } else if (action === "unequip") {
       game.unequip(slot);
     } else if (action === "close") {
@@ -84,9 +93,13 @@ export class InventoryPanel extends Panel {
     }).join("");
 
     const bagAttrs = (i) => {
-      const hint = isEquippable(ITEMS[player.inventory[i].defId]) ? "Drag onto the figure or click to equip" : "Click to drink";
+      const def = ITEMS[player.inventory[i].defId];
+      const hint = isEquippable(def) ? "Drag onto the figure or click to equip" : def.potion === "travel" ? "Click to travel" : def.type === "consumable" ? "Click to drink" : "";
       return `data-action="use" data-index="${i}" data-drag="bag:${i}" data-drop="bag:${i}" draggable="true" data-hint="${hint}"`;
     };
+    const pouch = Object.entries(MATERIALS).map(([id, m]) => `${m.name} <strong>${player.materials[id]}</strong>`).join(" · ");
+    const runes = Object.entries(RUNES).map(([id, r]) => `${r.name.replace(" Rune", "")} (${id.toUpperCase()}) <strong>${player.runes[id]}</strong>`).join(" · ");
+    const gather = `Gathering Lv ${gatheringLevel(player.harvests)} · ${Math.round(bonusChance(player.harvests) * 100)}% bonus-harvest chance`;
 
     this.element.innerHTML = `
       <h2>Inventory <span class="dim">${player.gold} g &middot; ${player.arrows} arrows</span></h2>
@@ -102,6 +115,10 @@ export class InventoryPanel extends Panel {
           <h3>Bag</h3>
           ${slotGrid(player.inventory, bagAttrs, "", (i) => `data-drop="bag:${i}"`)}
           <p class="dim small">Drag gear onto its slot on the figure, or click it, to equip. Drag it back to the bag to take it off. Click a potion to drink it.</p>
+          <h3>Pouch</h3>
+          <p class="small pouch">${pouch}</p>
+          <p class="small pouch">Runes: ${runes}</p>
+          <p class="dim small">${gather}</p>
         </div>
       </div>
       <div class="actions"><button class="btn" data-action="close">Close (I)</button></div>`;

@@ -8,8 +8,9 @@ import { Game } from "../js/game.js";
 import { mulberry32 } from "../js/rng.js";
 import { damageReduction, isInArc, mitigate } from "../js/systems/combat.js";
 import { applyRegen } from "../js/systems/regen.js";
-import { maxHp, maxMana, weaponDamage } from "../js/systems/stats.js";
-import { Zombie } from "../js/entities/zombie.js";
+import { castManaCost, maxHp, maxMana, weaponDamage } from "../js/systems/stats.js";
+import { Enemy } from "../js/entities/enemy.js";
+import { enemyAtLevel } from "../js/systems/scaling.js";
 import { VILLAGE_SPAWN } from "../js/world/village.js";
 
 const T = TILE_SIZE;
@@ -22,10 +23,10 @@ function newGame() {
 function zombieNear(game, dx, dy) {
   const tx = Math.floor((game.player.x + dx * T) / T);
   const ty = Math.floor((game.player.y + dy * T) / T);
-  const zombie = new Zombie(ENEMIES.zombie_l1, { id: `${tx},${ty}`, tx, ty });
+  const zombie = new Enemy(enemyAtLevel("zombie", 1), { id: `${tx},${ty}`, tx, ty });
   zombie.x = zombie.prevX = game.player.x + dx * T;
   zombie.y = zombie.prevY = game.player.y + dy * T;
-  game.zombies.push(zombie);
+  game.enemies.push(zombie);
   return zombie;
 }
 
@@ -238,29 +239,34 @@ describe("bow", () => {
 });
 
 describe("staff", () => {
-  it("consumes 5 mana per fireball", () => {
+  it("costs 5 + 1.5 × INT mana per fireball (13 at the starting 5 INT)", () => {
     const game = newGame();
     game.player.weapon = "staff";
     game.attack();
-    assert.equal(game.player.mana, 45);
+    assert.equal(game.player.mana, 37);
     assert.equal(game.projectiles[0].kind, "fireball");
+  });
+
+  it("keeps casts per full bar about level as INT grows, so the staff can't be spammed", () => {
+    const castsPerBar = (int) => Math.floor(maxMana({ int }) / castManaCost(WEAPONS.staff, { int }));
+    assert.deepEqual([castsPerBar(5), castsPerBar(20), castsPerBar(60), castsPerBar(200)], [3, 5, 6, 6]);
   });
 
   it("cannot cast without enough mana", () => {
     const game = newGame();
     game.player.weapon = "staff";
-    game.player.mana = 4;
+    game.player.mana = 12;
     game.attack();
     assert.equal(game.projectiles.length, 0);
-    assert.equal(game.player.mana, 4);
-    assert.deepEqual(game.events, [{ type: "toast", text: "Not enough mana" }]);
+    assert.equal(game.player.mana, 12);
+    assert.deepEqual(game.events, [{ type: "toast", text: "Not enough mana (a cast costs 13)" }]);
   });
 });
 
 describe("player damage", () => {
   it("takes zombie damage and ignores hits during i-frames", () => {
     const game = newGame();
-    assert.equal(game.damagePlayer(ENEMIES.zombie_l1.damage), 2);
+    assert.equal(game.damagePlayer(ENEMIES.zombie.damage), 2);
     assert.equal(game.player.hp, 48);
     assert.equal(game.player.iframes, PLAYER_IFRAMES);
     assert.equal(game.damagePlayer(2), 0);

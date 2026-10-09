@@ -1,6 +1,6 @@
 import { WEAPONS } from "../data/weapons.js";
 import { STAT_KEYS, previewStats, xpToNext } from "../systems/leveling.js";
-import { maxHp, maxMana, weaponDamage } from "../systems/stats.js";
+import { castManaCost, maxHp, maxMana, totalStats, weaponDamage } from "../systems/stats.js";
 import { armorSummary } from "./items.js";
 import { Panel } from "./panel.js";
 
@@ -18,9 +18,13 @@ const DERIVED = [
   { label: "Sword damage", value: (s, e) => weaponDamage(WEAPONS.sword, s, e.sword) },
   { label: "Arrow damage", value: (s, e) => weaponDamage(WEAPONS.bow, s, e.bow) },
   { label: "Fireball damage", value: (s, e) => weaponDamage(WEAPONS.staff, s, e.staff) },
+  { label: "Mana per fireball", value: (s) => castManaCost(WEAPONS.staff, s) },
 ];
 
-/** Character sheet: stage stat points with a live derived-stat preview, then Confirm or Cancel. */
+/**
+ * Character sheet: stage stat points with a live derived-stat preview, then Confirm or Cancel.
+ * Stats show runes from equipped gear separately; derived values include them.
+ */
 export class CharacterSheet extends Panel {
   onOpen() {
     this.pending = emptyPending();
@@ -46,14 +50,15 @@ export class CharacterSheet extends Panel {
     const { player } = this.game;
     const total = this.pendingTotal();
     const remaining = player.unspentPoints - total;
-    const preview = previewStats(player.stats, this.pending);
+    const stats = totalStats(player);
+    const preview = previewStats(stats, this.pending);
 
     const statRows = STAT_KEYS.map((key) => {
       const pending = this.pending[key];
       return `
         <tr>
           <th>${STAT_INFO[key].name}<small>${STAT_INFO[key].effect}</small></th>
-          <td class="num">${player.stats[key]}${pending ? `<span class="gain"> +${pending}</span>` : ""}</td>
+          <td class="num">${player.stats[key]}${stats[key] > player.stats[key] ? `<span class="rune-text"> +${stats[key] - player.stats[key]}</span>` : ""}${pending ? `<span class="gain"> +${pending}</span>` : ""}</td>
           <td class="controls">
             <button class="btn small" data-action="remove" data-stat="${key}" ${pending ? "" : "disabled"} aria-label="Remove ${STAT_INFO[key].name}">−</button>
             <button class="btn small" data-action="add" data-stat="${key}" ${remaining > 0 ? "" : "disabled"} aria-label="Add ${STAT_INFO[key].name}">+</button>
@@ -62,7 +67,7 @@ export class CharacterSheet extends Panel {
     }).join("");
 
     const derivedRows = DERIVED.map(({ label, value }) => {
-      const now = value(player.stats, player.equipment);
+      const now = value(stats, player.equipment);
       const next = value(preview, player.equipment);
       return `<tr><th>${label}</th><td class="num">${now}${next !== now ? ` <span class="gain">→ ${next}</span>` : ""}</td></tr>`;
     }).join("");
@@ -72,6 +77,7 @@ export class CharacterSheet extends Panel {
       <p class="dim">XP ${player.xp} / ${xpToNext(player.level)} &middot; ${player.gold} g &middot; ${armorSummary(player.armor)}</p>
       <p class="points ${remaining > 0 ? "has-points" : ""}">${remaining} stat point${remaining === 1 ? "" : "s"} available</p>
       <table class="stats">${statRows}</table>
+      ${Object.keys(stats).some((k) => stats[k] > player.stats[k]) ? `<p class="dim small"><span class="rune-text">Purple</span> numbers come from runes on your equipped gear.</p>` : ""}
       <h3>Derived</h3>
       <table class="derived">${derivedRows}</table>
       <div class="actions">

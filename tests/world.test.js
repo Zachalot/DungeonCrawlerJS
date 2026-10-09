@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { CHUNK_SIZE, DUNGEON_CELL_SIZE, DUNGEON_MIN_VILLAGE_DISTANCE, TILE_SIZE, WORLD_SIZE } from "../js/config.js";
+import { CHUNK_SIZE, DUNGEON_CELL_SIZE, DUNGEON_LEVEL_DISTANCE, DUNGEON_MIN_VILLAGE_DISTANCE, TILE_SIZE, WORLD_SIZE } from "../js/config.js";
 import { hash } from "../js/rng.js";
 import { generateChunk } from "../js/world/chunks.js";
 import { dungeonForCell } from "../js/world/dungeons.js";
@@ -37,9 +37,12 @@ describe("generateChunk", () => {
     assert.notDeepEqual(generateChunk(1, 3, 3).tiles, generateChunk(2, 3, 3).tiles);
   });
 
-  it("fills tiles outside the world with border", () => {
-    const outside = generateChunk(42, -1, -1);
-    assert.ok(outside.tiles.every((t) => t === Tile.BORDER));
+  it("keeps generating normal terrain beyond the starting square, negative coordinates too", () => {
+    for (const [cx, cy] of [[-1, -1], [-40, 3], [200, 200]]) {
+      const chunk = generateChunk(42, cx, cy);
+      assert.ok(chunk.tiles.some((t) => t === Tile.GRASS), `chunk ${cx},${cy}`);
+      assert.ok(chunk.tiles.some((t) => t === Tile.TREE || t === Tile.ROCK));
+    }
   });
 });
 
@@ -110,25 +113,40 @@ describe("dungeon placement", () => {
   }
 });
 
-describe("world border", () => {
-  it("is solid on every edge and beyond", () => {
-    const world = new World(42);
-    for (let i = 0; i < WORLD_SIZE; i += 37) {
-      assert.ok(world.isSolidAt(0, i));
-      assert.ok(world.isSolidAt(WORLD_SIZE - 1, i));
-      assert.ok(world.isSolidAt(i, 0));
-      assert.ok(world.isSolidAt(i, WORLD_SIZE - 1));
+describe("endless world", () => {
+  it("has no border: dungeons keep appearing, and get higher-level farther out", () => {
+    const far = 20 * DUNGEON_LEVEL_DISTANCE;
+    const cx = Math.floor((VILLAGE_CENTER_TILE + far) / DUNGEON_CELL_SIZE);
+    const levels = [];
+    for (let cy = -2; cy < 4; cy++) {
+      const d = dungeonForCell(42, cx, Math.floor(VILLAGE_CENTER_TILE / DUNGEON_CELL_SIZE) + cy);
+      if (d) levels.push(d.level);
     }
-    assert.ok(world.isSolidAt(-5, 10));
-    assert.ok(world.isSolidAt(WORLD_SIZE + 5, 10));
+    assert.ok(levels.length > 0 && levels.every((l) => l >= 20), `levels ${levels}`);
+    const west = dungeonForCell(42, -30, 4);
+    assert.ok(west && west.level > 20, "negative coordinates work too");
+  });
+
+  it("shows harvested trees and rocks as walkable grass, and placed structures as solid", () => {
+    const world = new World(42);
+    let tree = null;
+    for (let tx = 150; !tree; tx++) if (world.getTile(tx, 150) === Tile.TREE) tree = tx;
+    assert.ok(world.isSolidAt(tree, 150));
+    world.harvested.set(`${tree},150`, 999);
+    assert.equal(world.getTile(tree, 150), Tile.GRASS);
+    assert.ok(!world.isSolidAt(tree, 150));
+    world.structureTiles = new Set(["200,200"]);
+    assert.ok(world.isSolidAt(200, 200));
   });
 });
 
 describe("reachability", () => {
   for (const seed of SEEDS) {
-    it(`connects every dungeon entrance to the village spawn (seed ${seed})`, () => {
+    // Searches the starting square only: the world beyond it is endless.
+    it(`connects every dungeon entrance near the village to the village spawn (seed ${seed})`, () => {
       const world = new World(seed);
       const visited = new Uint8Array(WORLD_SIZE * WORLD_SIZE);
+      const outside = (x, y) => x < 0 || y < 0 || x >= WORLD_SIZE || y >= WORLD_SIZE;
       const start = [Math.floor(VILLAGE_SPAWN.x / TILE_SIZE), Math.floor(VILLAGE_SPAWN.y / TILE_SIZE)];
       const queue = [start];
       visited[start[1] * WORLD_SIZE + start[0]] = 1;
@@ -136,7 +154,7 @@ describe("reachability", () => {
         const [x, y] = queue.pop();
         for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
           const i = ny * WORLD_SIZE + nx;
-          if (visited[i] || world.isSolidAt(nx, ny)) continue;
+          if (outside(nx, ny) || visited[i] || world.isSolidAt(nx, ny)) continue;
           visited[i] = 1;
           queue.push([nx, ny]);
         }
@@ -144,7 +162,9 @@ describe("reachability", () => {
       for (let cy = 0; cy < CELLS; cy++) {
         for (let cx = 0; cx < CELLS; cx++) {
           const d = dungeonForCell(seed, cx, cy);
-          if (d) assert.ok(visited[d.ty * WORLD_SIZE + d.tx], `dungeon ${d.id} unreachable`);
+          // Edge cells can be walled in by the square's edge yet reachable from beyond it.
+          const inner = cx > 0 && cy > 0 && cx < CELLS - 1 && cy < CELLS - 1;
+          if (d && inner) assert.ok(visited[d.ty * WORLD_SIZE + d.tx], `dungeon ${d.id} unreachable`);
         }
       }
     });
@@ -152,10 +172,10 @@ describe("reachability", () => {
 });
 
 describe("solid tiles", () => {
-  it("blocks rocks, trees, walls, and border only", () => {
+  it("blocks rocks, trees, and walls only", () => {
     assert.deepEqual(
       Object.entries(Tile).filter(([, t]) => isSolid(t)).map(([name]) => name).sort(),
-      ["BORDER", "DUNGEON_WALL", "ROCK", "TREE", "VILLAGE_WALL"],
+      ["DUNGEON_WALL", "ROCK", "TREE", "VILLAGE_WALL"],
     );
   });
 });

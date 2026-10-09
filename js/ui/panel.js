@@ -22,7 +22,9 @@ export class Panel {
     return this.getGame();
   }
 
-  open() {
+  /** `options` are panel-specific (e.g. the travel potion being drunk), kept as `this.options`. */
+  open(options = {}) {
+    this.options = options;
     this.element.addEventListener("click", this.handleClick);
     this.dragDrop?.attach();
     this.onOpen();

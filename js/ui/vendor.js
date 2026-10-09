@@ -1,10 +1,10 @@
 import { ITEMS } from "../data/items.js";
 import { VENDORS } from "../data/vendors.js";
-import { describeEntry } from "../systems/economy.js";
+import { describeEntry, vendorStock } from "../systems/economy.js";
 import { itemIcon, slotGrid } from "./items.js";
 import { Panel } from "./panel.js";
 
-/** Vendor dialog with Buy, and for vendors that buy, Sell and Buyback tabs. */
+/** Vendor dialog with Buy, and for vendors that buy, Sell and Buyback tabs. Stock and arrow prices follow the player's level. */
 export class VendorDialog extends Panel {
   constructor(element, getGame, callbacks, vendorId) {
     super(element, getGame, callbacks);
@@ -60,9 +60,9 @@ export class VendorDialog extends Panel {
         .map((entry, i) => shopRow(itemIcon(entry.defId, 1, `data-price="${entry.price}"`), ITEMS[entry.defId].name, entry.price, player.gold, `data-action="buyback" data-index="${i}"`))
         .join("")}</div>`;
     }
-    return `<div class="shop-list">${this.vendor.stock
+    return `<div class="shop-list">${vendorStock(this.vendorId, player)
       .map((entry, i) => {
-        const { name, price } = describeEntry(entry);
+        const { name, price } = describeEntry(entry, player);
         const icon = entry.arrows ? `<div class="item-icon type-ammo"><span class="glyph">➶</span></div>` : itemIcon(entry.item, 1, `data-price="${price}"`);
         return shopRow(icon, name, price, player.gold, `data-action="buy" data-index="${i}"`);
       })

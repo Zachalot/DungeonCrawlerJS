@@ -1,4 +1,5 @@
-import { ITEMS, QUICK_WHEEL_ITEMS } from "../data/items.js";
+import { ITEMS, POTION_KINDS, QUICK_WHEEL_KINDS } from "../data/items.js";
+import { cycleWheelLevel, potionLevels, wheelPotion } from "../systems/consumables.js";
 import { countItem } from "../systems/inventory.js";
 import { itemIcon } from "./items.js";
 
@@ -25,8 +26,10 @@ export function clampCenter(x, y, width, height, radius = OUTER_RADIUS + EDGE_MA
 }
 
 /**
- * Hold-Q radial menu. Open it where the mouse is, point toward a potion, and release Q
- * to drink it; release in the middle to cancel. The game keeps running while it's open.
+ * Hold-Q radial menu with one segment per potion kind (health, mana, travel). Point at one and
+ * release Q to use it; release in the middle to cancel. Each segment uses the level the player
+ * picked by scrolling over it (remembered), or else the highest level they carry. The game keeps
+ * running while it's open.
  */
 export class QuickWheel {
   constructor(element, getGame) {
@@ -52,7 +55,7 @@ export class QuickWheel {
   /** Re-highlights from the current mouse position (CSS px). */
   update(mouseX, mouseY) {
     if (!this.isOpen) return;
-    const selected = pickSegment(mouseX - this.center.x, mouseY - this.center.y, QUICK_WHEEL_ITEMS.length);
+    const selected = pickSegment(mouseX - this.center.x, mouseY - this.center.y, QUICK_WHEEL_KINDS.length);
     if (selected !== this.selected) {
       this.selected = selected;
       this.render();
@@ -61,9 +64,16 @@ export class QuickWheel {
     }
   }
 
-  /** Closes the wheel; returns the chosen item id, or null if the pointer was in the middle. */
+  /** Mouse wheel over the highlighted segment: the next (+1) or previous (−1) level carried. */
+  cycle(direction) {
+    if (!this.isOpen || this.selected === null) return;
+    cycleWheelLevel(this.getGame().player, QUICK_WHEEL_KINDS[this.selected], direction);
+    this.render();
+  }
+
+  /** Closes the wheel; returns the chosen potion's item id, or null (cancelled, or none carried). */
   confirm() {
-    const choice = this.selected === null ? null : QUICK_WHEEL_ITEMS[this.selected];
+    const choice = this.selected === null ? null : wheelPotion(this.getGame().player, QUICK_WHEEL_KINDS[this.selected]);
     this.cancel();
     return choice;
   }
@@ -76,39 +86,44 @@ export class QuickWheel {
 
   render() {
     const { player } = this.getGame();
-    const n = QUICK_WHEEL_ITEMS.length;
+    const n = QUICK_WHEEL_KINDS.length;
     const step = (Math.PI * 2) / n;
-    const wedges = QUICK_WHEEL_ITEMS.map((defId, i) => {
-      const classes = ["wedge", ITEMS[defId].resource, i === this.selected ? "selected" : "", countItem(player.inventory, defId) ? "" : "none"];
+    const wedges = QUICK_WHEEL_KINDS.map((kind, i) => {
+      const classes = ["wedge", kind, i === this.selected ? "selected" : "", wheelPotion(player, kind) ? "" : "none"];
       return `<path class="${classes.join(" ")}" d="${wedgePath(i * step - step / 2, i * step + step / 2)}" />`;
     }).join("");
 
-    const labels = QUICK_WHEEL_ITEMS.map((defId, i) => {
+    const labels = QUICK_WHEEL_KINDS.map((kind, i) => {
       const r = (OUTER_RADIUS + INNER_RADIUS) / 2;
       const x = Math.sin(i * step) * r;
       const y = -Math.cos(i * step) * r;
-      const count = countItem(player.inventory, defId);
-      return `<div class="wheel-item ${count ? "" : "none"}" style="transform: translate(${x}px, ${y}px)">
-        ${itemIcon(defId)}<span class="wheel-count" data-def="${defId}">×${count}</span>
+      const defId = wheelPotion(player, kind);
+      const levels = potionLevels(player.inventory, kind).length;
+      return `<div class="wheel-item ${defId ? "" : "none"}" style="transform: translate(${x}px, ${y}px)">
+        ${defId ? itemIcon(defId) : `<div class="item-icon empty"></div>`}<span class="wheel-count" data-kind="${kind}">×${defId ? countItem(player.inventory, defId) : 0}</span>
+        ${levels > 1 ? `<span class="wheel-levels">${levels} levels</span>` : ""}
       </div>`;
     }).join("");
 
-    const selected = this.selected === null ? null : QUICK_WHEEL_ITEMS[this.selected];
-    const caption = selected ? ITEMS[selected].name : "Release to cancel";
+    const kind = this.selected === null ? null : QUICK_WHEEL_KINDS[this.selected];
+    const defId = kind && wheelPotion(player, kind);
+    const many = kind && potionLevels(player.inventory, kind).length > 1;
+    const caption = !kind ? "Release to cancel" : defId ? `${ITEMS[defId].name}${many ? `<br><span class="dim">scroll to change level</span>` : ""}` : `No ${POTION_KINDS[kind].name}s`;
     this.element.innerHTML = `
       <svg class="wheel-ring" viewBox="${-OUTER_RADIUS} ${-OUTER_RADIUS} ${OUTER_RADIUS * 2} ${OUTER_RADIUS * 2}"
         width="${OUTER_RADIUS * 2}" height="${OUTER_RADIUS * 2}">${wedges}
-        <circle class="wheel-center ${selected ? "" : "selected"}" r="${INNER_RADIUS - 4}" />
+        <circle class="wheel-center ${kind ? "" : "selected"}" r="${INNER_RADIUS - 4}" />
       </svg>
       ${labels}
-      <div class="wheel-caption">${caption}${player.potionCooldown > 0 ? `<br><span class="dim">cooldown</span>` : ""}</div>`;
+      <div class="wheel-caption">${caption}${player.potionCooldown > 0 && kind !== "travel" ? `<br><span class="dim">cooldown</span>` : ""}</div>`;
   }
 
   // Counts can change while the wheel is open (the game keeps running); cheap in-place refresh.
   renderCounts() {
     const { player } = this.getGame();
     for (const el of this.element.querySelectorAll(".wheel-count")) {
-      el.textContent = `×${countItem(player.inventory, el.dataset.def)}`;
+      const defId = wheelPotion(player, el.dataset.kind);
+      el.textContent = `×${defId ? countItem(player.inventory, defId) : 0}`;
     }
   }
 }

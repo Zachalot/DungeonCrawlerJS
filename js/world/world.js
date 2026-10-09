@@ -1,16 +1,22 @@
-import { CHUNK_SIZE, TILE_SIZE, WORLD_SIZE } from "../config.js";
+import { CHUNK_SIZE } from "../config.js";
 import { generateChunk } from "./chunks.js";
-import { isSolid } from "./tiles.js";
+import { Tile, isSolid } from "./tiles.js";
 import { isInVillage } from "./village.js";
 
-/** Overworld tile access backed by lazily generated, cached chunks. */
+/**
+ * The endless overworld: tiles from lazily generated, cached chunks, plus what the player
+ * changed: harvested trees and rocks (grass until they regrow) and placed village structures.
+ */
 export class World {
   constructor(seed) {
     this.kind = "overworld";
+    this.endless = true;
     this.seed = seed;
     this.chunks = new Map();
-    this.widthPx = WORLD_SIZE * TILE_SIZE;
-    this.heightPx = WORLD_SIZE * TILE_SIZE;
+    this.widthPx = Infinity;
+    this.heightPx = Infinity;
+    this.harvested = new Map(); // "tx,ty" → play time when it regrows
+    this.structureTiles = new Set(); // "tx,ty" covered by a placed structure (solid)
   }
 
   getChunk(chunkX, chunkY) {
@@ -29,7 +35,8 @@ export class World {
     const lx = tx - chunk.chunkX * CHUNK_SIZE;
     const ly = ty - chunk.chunkY * CHUNK_SIZE;
     const i = ly * CHUNK_SIZE + lx;
-    return { tile: chunk.tiles[i], variant: chunk.variants[i] };
+    const tile = this.harvested.size && this.harvested.has(`${tx},${ty}`) ? Tile.GRASS : chunk.tiles[i];
+    return { tile, variant: chunk.variants[i] };
   }
 
   getTile(tx, ty) {
@@ -37,7 +44,7 @@ export class World {
   }
 
   isSolidAt(tx, ty) {
-    return isSolid(this.getTile(tx, ty));
+    return isSolid(this.getTile(tx, ty)) || this.structureTiles.has(`${tx},${ty}`);
   }
 
   isSafeZone(tx, ty) {

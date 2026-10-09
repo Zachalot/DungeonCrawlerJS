@@ -9,7 +9,7 @@ function playerWithLegs() {
   const game = new Game(42);
   addItem(game.player.inventory, "leather_legs", 1, game.newUid);
   const legs = game.player.inventory.findIndex((s) => s?.defId === "leather_legs");
-  const potion = game.player.inventory.findIndex((s) => s?.defId === "minor_hp_potion");
+  const potion = game.player.inventory.findIndex((s) => s?.defId === "hp_potion_1");
   return { player: game.player, legs, potion };
 }
 

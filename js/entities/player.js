@@ -7,8 +7,9 @@ import {
   STARTING_STATS,
   TILE_SIZE,
 } from "../config.js";
+import { MATERIAL_TYPES, RUNE_TYPES } from "../data/enemies.js";
 import { createEquipment, createSlots, totalArmor } from "../systems/inventory.js";
-import { maxHp, maxMana } from "../systems/stats.js";
+import { maxHp, maxMana, totalStats } from "../systems/stats.js";
 import { moveAndCollide } from "../world/collision.js";
 
 export class Player {
@@ -30,6 +31,10 @@ export class Player {
     this.arrows = STARTING_ARROWS;
     this.inventory = createSlots(INVENTORY_SIZE);
     this.equipment = createEquipment();
+    this.materials = Object.fromEntries(MATERIAL_TYPES.map((id) => [id, 0])); // pouch: wood, stone, goop
+    this.runes = Object.fromEntries(RUNE_TYPES.map((id) => [id, 0])); // boss runes, by stat
+    this.harvests = 0; // trees and rocks harvested: the Gathering skill
+    this.wheelLevels = {}; // potion level the quick wheel uses, by kind (unset = highest carried)
     this.potionCooldown = 0; // s until another potion can be drunk
 
     this.weapon = "sword";
@@ -71,6 +76,18 @@ export class Player {
   /** Total armor from equipped pieces. */
   get armor() {
     return totalArmor(this.equipment);
+  }
+
+  /** Stats including the runes on equipped gear. */
+  get totalStats() {
+    return totalStats(this);
+  }
+
+  /** Keeps HP and mana within their maximums (after gear with runes comes off, for example). */
+  clampResources() {
+    const stats = totalStats(this);
+    this.hp = Math.min(this.hp, maxHp(stats));
+    this.mana = Math.min(this.mana, maxMana(stats));
   }
 
   get tileX() {

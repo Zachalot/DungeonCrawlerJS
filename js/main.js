@@ -2,7 +2,7 @@ import { Camera } from "./camera.js";
 import { Auth } from "./cloud/auth.js";
 import { CloudSaves } from "./cloud/cloudSaves.js";
 import { SyncStatus, SyncedSaveStore } from "./cloud/sync.js";
-import { AUTOSAVE_INTERVAL, MAX_FRAME_TIME, UPDATE_HZ } from "./config.js";
+import { AUTOSAVE_INTERVAL, MAX_FRAME_TIME, TILE_SIZE, UPDATE_HZ } from "./config.js";
 import { WEAPONS, WEAPON_ORDER } from "./data/weapons.js";
 import { Game } from "./game.js";
 import { Input } from "./input.js";
@@ -14,24 +14,29 @@ import {
   drawHitboxes,
   drawInteractions,
   drawLabels,
+  drawPlacement,
   drawProjectiles,
   drawWorld,
 } from "./render.js";
 import { randomSeed } from "./rng.js";
 import { SaveStore, restoreGame } from "./save.js";
+import { BuildPanel } from "./ui/build.js";
 import { CharacterSheet } from "./ui/character.js";
 import { ChestPanel } from "./ui/chest.js";
 import { DevPanel, devPanelEnabled } from "./ui/devPanel.js";
+import { EnchantingPanel } from "./ui/enchanting.js";
 import { Hud } from "./ui/hud.js";
 import { InventoryPanel } from "./ui/inventory.js";
 import { MapPanel, Minimap } from "./ui/maps.js";
 import { Tooltip } from "./ui/items.js";
 import { PauseMenu } from "./ui/pause.js";
+import { PotionTablePanel } from "./ui/potionTable.js";
 import { QuickWheel } from "./ui/quickWheel.js";
 import { StashPanel } from "./ui/stash.js";
 import { TitleScreen } from "./ui/title.js";
 import { Toasts } from "./ui/toast.js";
 import { TrainerDialog } from "./ui/trainer.js";
+import { TravelPanel } from "./ui/travel.js";
 import { VendorDialog } from "./ui/vendor.js";
 
 const STEP = 1 / UPDATE_HZ;
@@ -74,10 +79,14 @@ const gameUi = document.getElementById("game-ui");
 // Modal panels. While one is open the simulation is paused.
 const modalBackdrop = document.getElementById("modal-backdrop");
 const modal = document.getElementById("modal");
-const callbacks = { onClose: closePanel };
+const callbacks = { onClose: closePanel, onPlace: startPlacing, onOpenPanel: openPanel };
 const panels = {
   character: new CharacterSheet(modal, getGame, callbacks),
   inventory: new InventoryPanel(modal, getGame, callbacks),
+  build: new BuildPanel(modal, getGame, callbacks),
+  enchantingTable: new EnchantingPanel(modal, getGame, callbacks),
+  potionTable: new PotionTablePanel(modal, getGame, callbacks),
+  travel: new TravelPanel(modal, getGame, callbacks),
   trainer: new TrainerDialog(modal, getGame, { ...callbacks, onRespec: () => openPanel("character") }),
   potionVendor: new VendorDialog(modal, getGame, callbacks, "potionVendor"),
   generalVendor: new VendorDialog(modal, getGame, callbacks, "generalVendor"),
@@ -93,13 +102,15 @@ const panels = {
   }),
   map: new MapPanel(modal, getGame, callbacks),
 };
-const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory", KeyM: "map" };
+const TOGGLE_KEYS = { KeyC: "character", KeyI: "inventory", KeyM: "map", KeyB: "build" };
 const minimap = new Minimap(document.getElementById("minimap"));
 const devPanel = devPanelEnabled(location) ? new DevPanel(document.getElementById("dev-panel"), getGame) : null;
 let activePanel = null;
 
 const wheel = new QuickWheel(document.getElementById("quick-wheel"), getGame);
 let wheelAim = { x: 0, y: 0 }; // aim frozen while the wheel is open
+/** A village structure being placed (from the build menu or a table's Move button): { kind }, or null. */
+let placing = null;
 
 const title = new TitleScreen(document.getElementById("title"), {
   getStore: () => store,
@@ -123,6 +134,16 @@ const title = new TitleScreen(document.getElementById("title"), {
 });
 
 document.getElementById("menu-button").addEventListener("click", () => openPanel("pause"));
+// Scrolling while the quick wheel is open changes the highlighted potion's level.
+window.addEventListener(
+  "wheel",
+  (e) => {
+    if (!wheel.isOpen) return;
+    e.preventDefault();
+    wheel.cycle(e.deltaY > 0 ? 1 : -1);
+  },
+  { passive: false },
+);
 window.addEventListener("resize", resize);
 window.addEventListener("beforeunload", () => saveNow("unload", { immediate: true }));
 window.addEventListener("online", () => store.flush?.());
@@ -213,6 +234,7 @@ function startGame(newSlot, newGame) {
 
 function showTitle() {
   wheel.cancel();
+  placing = null;
   devPanel?.hide();
   game = null;
   slot = null;
@@ -289,6 +311,7 @@ function frame(now) {
   drawDarkness(ctx, game, alpha, camera);
   drawLabels(ctx, game, camera);
   drawInteractions(ctx, game, camera);
+  drawPlacement(ctx, game, placing, mouseTile(), camera);
   drawHitboxes(ctx, game, alpha, camera);
   drawGraveArrow(ctx, game, alpha, camera);
   hud.update(frameTime, game);
@@ -297,6 +320,7 @@ function frame(now) {
 
 function handlePresses(pressed, released) {
   if (pressed.has("Backquote") && devPanel) devPanel.toggle();
+  if (placing && handlePlacing(pressed)) return;
   if (wheel.isOpen && handleWheel(pressed, released)) return;
   if (pressed.has("Escape")) {
     if (activePanel) closePanel();
@@ -306,6 +330,7 @@ function handlePresses(pressed, released) {
   for (const [code, id] of Object.entries(TOGGLE_KEYS)) {
     if (!pressed.has(code)) continue;
     if (activePanel === id) closePanel();
+    else if (id === "build" && (game.inDungeon || !game.isPlayerSafe())) game.toast("You can only build in the village.");
     else openPanel(id);
     return;
   }
@@ -332,7 +357,8 @@ function handleWheel(pressed, released) {
   }
   if (released.has("KeyQ")) {
     const choice = wheel.confirm();
-    if (choice) game.drinkPotion(choice);
+    const panel = choice && game.drinkPotion(choice);
+    if (panel) openPanel(panel, { defId: choice });
     return false;
   }
   if (!input.keys.has("KeyQ")) {
@@ -343,8 +369,39 @@ function handleWheel(pressed, released) {
   return false;
 }
 
-function openPanel(id) {
+/**
+ * Placement mode: the structure follows the mouse (green where it fits); a click places it and
+ * Esc cancels. Returns true if the press was consumed.
+ */
+function handlePlacing(pressed) {
+  if (pressed.has("Escape") || game.inDungeon || !game.isPlayerSafe()) {
+    placing = null;
+    input.consumeAttackPress();
+    return pressed.has("Escape");
+  }
+  if (input.consumeAttackPress()) {
+    const tile = mouseTile();
+    if (game.placeStructure(placing.kind, tile.tx, tile.ty)) placing = null;
+    input.mouse.down = false; // the placing click must not also swing the sword
+    return true;
+  }
+  return false;
+}
+
+function startPlacing(kind) {
+  closePanel();
+  placing = { kind };
+}
+
+/** The tile under the mouse pointer (where a structure's top-left would go). */
+function mouseTile() {
+  const { x, y } = camera.screenToWorld(input.mouse.x, input.mouse.y);
+  return { tx: Math.floor(x / TILE_SIZE), ty: Math.floor(y / TILE_SIZE) };
+}
+
+function openPanel(id, options = {}) {
   wheel.cancel();
+  placing = null;
   if (activePanel) panels[activePanel].close();
   activePanel = id;
   input.mouse.down = false; // the click that opened a panel must not become an attack
@@ -352,7 +409,7 @@ function openPanel(id) {
   modal.classList.toggle("wide", panels[id].wide);
   modal.dataset.panel = id; // lets CSS size specific panels (e.g. the map)
   modalBackdrop.hidden = false;
-  panels[id].open();
+  panels[id].open(options);
 }
 
 function closePanel() {
@@ -365,7 +422,7 @@ function closePanel() {
   tooltip.hide();
 }
 
-// Follows the player and shares the view with the game so zombies never spawn on screen.
+// Follows the player and shares the view with the game so enemies never spawn on screen.
 function syncCamera(alpha) {
   const target = game.player.renderPosition(alpha);
   camera.follow(target.x, target.y, game.area);
@@ -373,15 +430,17 @@ function syncCamera(alpha) {
 }
 
 function readControls() {
-  // The mouse belongs to the quick wheel while it's open: no attacks, and aim stays put.
-  const wheelOpen = wheel.isOpen;
+  // The mouse belongs to the quick wheel (or the structure being placed) while it's open:
+  // no attacks, and aim stays put for the wheel.
+  const busy = wheel.isOpen || placing !== null;
   const attackPressed = input.consumeAttackPress();
   return {
     move: input.moveVector(),
-    aim: wheelOpen ? wheelAim : camera.screenToWorld(input.mouse.x, input.mouse.y),
-    attack: !wheelOpen && input.isAttacking(),
-    attackPressed: !wheelOpen && attackPressed,
+    aim: wheel.isOpen ? wheelAim : camera.screenToWorld(input.mouse.x, input.mouse.y),
+    attack: !busy && input.isAttacking(),
+    attackPressed: !busy && attackPressed,
     weapon: WEAPON_ORDER.find((id) => input.keys.has(WEAPONS[id].key)) ?? null,
+    interactHeld: input.keys.has("KeyF"),
   };
 }
 

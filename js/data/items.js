@@ -1,5 +1,15 @@
-// Item definitions. Instances in inventories are { uid, defId, qty }; only instances are saved.
-// sellPrice is floor(buyPrice × 0.5) unless an item overrides it.
+import {
+  HP_POTION_BASE,
+  HP_POTION_PER_LEVEL,
+  MANA_POTION_PER_LEVEL,
+  MAX_ITEM_LEVEL,
+  POTION_PRICE_PER_LEVEL,
+  TRAVEL_POTION_PRICE_PER_LEVEL,
+} from "../config.js";
+
+// Item definitions. Instances in inventories are { uid, defId, qty, enchants? }; only instances
+// are saved. sellPrice is floor(buyPrice × 0.5) unless an item overrides it. Gear instances can
+// carry `enchants: { str: 2, … }` (runes applied at the enchanting table).
 
 export const ARMOR_SLOTS = Object.freeze(["helmet", "chest", "legs", "gloves", "boots"]);
 /** Weapon slots share ids with the weapon kinds in data/weapons.js. */
@@ -74,8 +84,47 @@ function weapon(id, name, slot, { tier, weaponBonus = 0, buyPrice, sellPrice }) 
   return item({ id, name, type: "weapon", tier, slot, weaponBonus, buyPrice, ...(sellPrice === undefined ? {} : { sellPrice }) });
 }
 
-function potion(id, name, resource, effect, buyPrice) {
-  return item({ id, name, type: "consumable", resource, effect, stackable: true, maxStack: 20, buyPrice });
+/** Potion kinds. Each comes in levels 1..MAX_ITEM_LEVEL. */
+export const POTION_KINDS = Object.freeze({
+  hp: { name: "Health Potion", resource: "hp", price: POTION_PRICE_PER_LEVEL },
+  mana: { name: "Mana Potion", resource: "mana", price: POTION_PRICE_PER_LEVEL },
+  travel: { name: "Travel Potion", resource: "travel", price: TRAVEL_POTION_PRICE_PER_LEVEL },
+});
+
+/** Item id of a potion; levels past MAX_ITEM_LEVEL use the highest one. */
+export function potionId(kind, level) {
+  return `${kind}_potion_${Math.min(Math.max(1, level), MAX_ITEM_LEVEL)}`;
+}
+
+/** Amount a level N health or mana potion restores. */
+export function potionAmount(kind, level) {
+  return kind === "hp" ? HP_POTION_BASE + HP_POTION_PER_LEVEL * (level - 1) : MANA_POTION_PER_LEVEL * level;
+}
+
+function potionItems() {
+  const items = {};
+  for (const [kind, { name, resource, price }] of Object.entries(POTION_KINDS)) {
+    for (let level = 1; level <= MAX_ITEM_LEVEL; level++) {
+      const id = potionId(kind, level);
+      items[id] = item({
+        id,
+        name: `${name} (Lv ${level})`,
+        type: "consumable",
+        potion: kind,
+        resource,
+        level,
+        amount: kind === "travel" ? 0 : potionAmount(kind, level),
+        stackable: true,
+        maxStack: 20,
+        buyPrice: price * level,
+      });
+    }
+  }
+  return items;
+}
+
+function tool(id, name, toolKind) {
+  return item({ id, name, type: "tool", tool: toolKind, tier: "starter", buyPrice: 10 });
 }
 
 export const ITEMS = Object.freeze({
@@ -83,25 +132,18 @@ export const ITEMS = Object.freeze({
   starter_sword: weapon("starter_sword", "Starter Sword", "sword", { tier: "starter", buyPrice: 5, sellPrice: 0 }),
   starter_bow: weapon("starter_bow", "Starter Bow", "bow", { tier: "starter", buyPrice: 5, sellPrice: 0 }),
   starter_staff: weapon("starter_staff", "Starter Staff", "staff", { tier: "starter", buyPrice: 5, sellPrice: 0 }),
-  minor_hp_potion: potion("minor_hp_potion", "Minor Health Potion", "hp", { flat: 25 }, 10),
-  minor_mana_potion: potion("minor_mana_potion", "Minor Mana Potion", "mana", { flat: 25 }, 10),
-  greater_hp_potion: potion("greater_hp_potion", "Greater Health Potion", "hp", { percent: 0.4 }, 40),
-  greater_mana_potion: potion("greater_mana_potion", "Greater Mana Potion", "mana", { percent: 0.4 }, 40),
+  starter_axe: tool("starter_axe", "Axe", "axe"),
+  starter_pickaxe: tool("starter_pickaxe", "Pickaxe", "pickaxe"),
+  ...potionItems(),
 });
 
-/** Potions grouped by resource, best first. */
-export const POTION_PRIORITY = Object.freeze({
-  hp: ["greater_hp_potion", "minor_hp_potion"],
-  mana: ["greater_mana_potion", "minor_mana_potion"],
-});
-
-/** Quick-select wheel segments, clockwise from the top. */
-export const QUICK_WHEEL_ITEMS = Object.freeze(["minor_hp_potion", "greater_hp_potion", "greater_mana_potion", "minor_mana_potion"]);
+/** Quick-select wheel segments, clockwise from the top: one per potion kind. */
+export const QUICK_WHEEL_KINDS = Object.freeze(["hp", "mana", "travel"]);
 
 /** Weapons a new character starts with equipped, and is re-armed with after dying. */
 export const STARTER_WEAPONS = Object.freeze({ sword: "starter_sword", bow: "starter_bow", staff: "starter_staff" });
 
 export const STARTING_ITEMS = Object.freeze([
-  { defId: "minor_hp_potion", qty: 2 },
-  { defId: "minor_mana_potion", qty: 2 },
+  { defId: potionId("hp", 1), qty: 2 },
+  { defId: potionId("mana", 1), qty: 2 },
 ]);

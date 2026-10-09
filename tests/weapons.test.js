@@ -62,7 +62,7 @@ describe("equipToSlot", () => {
 
   it("rejects potions", () => {
     const game = new Game(42);
-    const index = game.player.inventory.findIndex((s) => s?.defId === "minor_hp_potion");
+    const index = game.player.inventory.findIndex((s) => s?.defId === "hp_potion_1");
     game.events.length = 0;
     assert.equal(game.equipToSlot(index, "helmet"), false);
     assert.match(game.events[0].text, /can't be equipped/);

@@ -18,10 +18,11 @@ export const TILE_COLORS = Object.freeze({
   [Tile.VILLAGE_FLOOR]: [201, 180, 138],
   [Tile.VILLAGE_WALL]: [107, 74, 47],
   [Tile.DUNGEON_ENTRANCE]: [30, 30, 36],
-  [Tile.BORDER]: [24, 58, 22],
   [Tile.DUNGEON_FLOOR]: [86, 80, 72],
   [Tile.DUNGEON_WALL]: [28, 26, 24],
   [Tile.EXIT_PORTAL]: [124, 58, 237],
+  [Tile.STAIRS_DOWN]: [20, 18, 16],
+  [Tile.STAIRS_UP]: [150, 140, 130],
 });
 const UNEXPLORED = [9, 11, 14];
 
@@ -33,16 +34,19 @@ export const MARKER_COLORS = Object.freeze({
   grave: "#f8fafc",
   portal: "#a78bfa",
   chest: "#fbbf24",
-  ladder: "#fde68a",
+  rope: "#fde68a",
+  stairs: "#e5e7eb",
+  structure: "#a78bfa",
 });
 
 // ---- View math (pure, tested) ----------------------------------------------
 // A view is { x, y, scale, width, height }: the tile coordinate at the canvas's top-left,
-// pixels per tile, and the canvas size in CSS px.
+// pixels per tile, and the canvas size in CSS px. Bounds are { x0, y0, w, h } in tiles
+// (x0 and y0 default to 0): a dungeon floor, or the explored part of the endless overworld.
 
 /** Pixels per tile that fits the whole area in the view. */
-export function fitScale(width, height, areaTiles) {
-  return Math.min(width / areaTiles.w, height / areaTiles.h);
+export function fitScale(width, height, bounds) {
+  return Math.min(width / bounds.w, height / bounds.h);
 }
 
 /** A view of `width × height` px at `scale`, centered on tile (cx, cy). */
@@ -50,12 +54,12 @@ export function centeredView(cx, cy, scale, width, height) {
   return { x: cx - width / scale / 2, y: cy - height / scale / 2, scale, width, height };
 }
 
-/** Keeps the view's center inside the area, so you can't pan off into the void. */
-export function clampView(view, areaTiles) {
+/** Keeps the view's center inside the bounds, so you can't pan off into the void. */
+export function clampView(view, { x0 = 0, y0 = 0, w, h }) {
   const halfW = view.width / view.scale / 2;
   const halfH = view.height / view.scale / 2;
-  const cx = Math.min(areaTiles.w, Math.max(0, view.x + halfW));
-  const cy = Math.min(areaTiles.h, Math.max(0, view.y + halfH));
+  const cx = Math.min(x0 + w, Math.max(x0, view.x + halfW));
+  const cy = Math.min(y0 + h, Math.max(y0, view.y + halfH));
   return { ...view, x: cx - halfW, y: cy - halfH };
 }
 
@@ -84,7 +88,7 @@ function paintTiles(canvas, area, fog, x0, y0, w, h) {
     for (let x = 0; x < w; x++) {
       const tx = x0 + x;
       const ty = y0 + y;
-      const inside = tx >= 0 && ty >= 0 && tx < areaW && ty < areaH;
+      const inside = area.endless || (tx >= 0 && ty >= 0 && tx < areaW && ty < areaH);
       const color = inside && fog.isExplored(tx, ty) ? TILE_COLORS[area.getTileInfo(tx, ty).tile] ?? UNEXPLORED : UNEXPLORED;
       const i = (y * w + x) * 4;
       data[i] = color[0];
@@ -118,12 +122,16 @@ function drawMapView(ctx, game, view, painted, { labels }) {
   const fog = game.currentFog;
 
   if (game.inDungeon) {
-    const { portal, chest, ladder } = game.area;
-    if (fog.isExplored(portal.tx, portal.ty)) drawPortalIcon(ctx, ...at(portal.tx + 0.5, portal.ty + 0.5), showLabels);
-    if (fog.isExplored(chest.tx, chest.ty)) drawChestIcon(ctx, ...at(chest.tx + 0.5, chest.ty + 0.5), showLabels);
-    if (fog.isExplored(ladder.tx, ladder.ty)) drawLadderIcon(ctx, ...at(ladder.tx + 0.5, ladder.ty + 0.5), showLabels);
+    const { portal, stairsUp, stairsDown, chest, rope } = game.area;
+    const seen = (p) => p && fog.isExplored(p.tx, p.ty);
+    if (seen(portal)) drawPortalIcon(ctx, ...at(portal.tx + 0.5, portal.ty + 0.5), showLabels);
+    if (seen(stairsUp)) drawStairsIcon(ctx, ...at(stairsUp.tx + 0.5, stairsUp.ty + 0.5), showLabels ? "Stairs up" : null);
+    if (seen(stairsDown)) drawStairsIcon(ctx, ...at(stairsDown.tx + 0.5, stairsDown.ty + 0.5), showLabels ? "Stairs down" : null);
+    if (seen(chest)) drawChestIcon(ctx, ...at(chest.tx + 0.5, chest.ty + 0.5), showLabels);
+    if (seen(rope)) drawRopeIcon(ctx, ...at(rope.tx + 0.5, rope.ty + 0.5), showLabels);
   } else {
     drawVillage(ctx, at, view.scale, labels);
+    for (const st of game.structures) drawStructureIcon(ctx, ...at(st.tx + 0.5, st.ty + 0.5));
     const tiles = { x0: Math.floor(view.x), y0: Math.floor(view.y), x1: Math.ceil(view.x + view.width / view.scale), y1: Math.ceil(view.y + view.height / view.scale) };
     for (const d of dungeonsInRect(game.world.seed, tiles.x0, tiles.y0, tiles.x1, tiles.y1)) {
       if (!fog.isExplored(d.tx, d.ty)) continue;
@@ -220,27 +228,37 @@ function drawChestIcon(ctx, x, y, showLabel) {
   if (showLabel) label(ctx, "Treasure", x, y + 8, MARKER_COLORS.chest);
 }
 
-function drawLadderIcon(ctx, x, y, showLabel) {
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";
-  ctx.lineWidth = 5;
-  const path = () => {
+function drawRopeIcon(ctx, x, y, showLabel) {
+  ctx.lineCap = "round";
+  for (const [color, width] of [["rgba(0, 0, 0, 0.85)", 6], [MARKER_COLORS.rope, 3]]) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
     ctx.beginPath();
-    ctx.moveTo(x - 4, y - 7);
-    ctx.lineTo(x - 4, y + 7);
-    ctx.moveTo(x + 4, y - 7);
-    ctx.lineTo(x + 4, y + 7);
-    for (const ry of [-3, 1, 5]) {
-      ctx.moveTo(x - 4, y + ry);
-      ctx.lineTo(x + 4, y + ry);
-    }
-  };
-  path();
-  ctx.stroke();
-  ctx.strokeStyle = MARKER_COLORS.ladder;
+    ctx.moveTo(x, y - 7);
+    ctx.bezierCurveTo(x + 4, y - 2, x - 4, y + 2, x, y + 7);
+    ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+  if (showLabel) label(ctx, "Escape rope", x, y + 9, MARKER_COLORS.rope);
+}
+
+function drawStairsIcon(ctx, x, y, text) {
+  outlined(ctx, () => ctx.rect(x - 6, y - 6, 12, 12), "#1c1917", MARKER_COLORS.stairs, 2);
+  ctx.strokeStyle = MARKER_COLORS.stairs;
   ctx.lineWidth = 2;
-  path();
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y + 4);
+  ctx.lineTo(x - 4, y + 1);
+  ctx.lineTo(x - 1, y + 1);
+  ctx.lineTo(x - 1, y - 2);
+  ctx.lineTo(x + 2, y - 2);
+  ctx.lineTo(x + 2, y - 4);
   ctx.stroke();
-  if (showLabel) label(ctx, "Ladder", x, y + 9, MARKER_COLORS.ladder);
+  if (text) label(ctx, text, x, y + 9, MARKER_COLORS.stairs);
+}
+
+function drawStructureIcon(ctx, x, y) {
+  outlined(ctx, () => ctx.rect(x - 3, y - 3, 6, 6), MARKER_COLORS.structure);
 }
 
 // An arrow pointing where the player aims.
@@ -317,15 +335,22 @@ export class MapPanel extends Panel {
     this.drag = null;
   }
 
+  /** The mappable rectangle: a whole dungeon floor, or the explored part of the overworld plus the village. */
   areaTiles() {
-    const { area } = this.game;
-    return { w: area.widthPx / T, h: area.heightPx / T };
+    const { area, currentFog } = this.game;
+    if (!area.endless) return { x0: 0, y0: 0, w: area.widthPx / T, h: area.heightPx / T };
+    const explored = currentFog.bounds() ?? { x0: VILLAGE_ORIGIN, y0: VILLAGE_ORIGIN, w: VILLAGE_SIZE, h: VILLAGE_SIZE };
+    const x0 = Math.min(explored.x0, VILLAGE_ORIGIN);
+    const y0 = Math.min(explored.y0, VILLAGE_ORIGIN);
+    const x1 = Math.max(explored.x0 + explored.w, VILLAGE_ORIGIN + VILLAGE_SIZE);
+    const y1 = Math.max(explored.y0 + explored.h, VILLAGE_ORIGIN + VILLAGE_SIZE);
+    return { x0, y0, w: x1 - x0, h: y1 - y0 };
   }
 
   onOpen() {
     const { game } = this;
     const area = this.areaTiles();
-    this.painted = paintTiles(this.scratch, game.area, game.currentFog, 0, 0, area.w, area.h);
+    this.painted = paintTiles(this.scratch, game.area, game.currentFog, area.x0, area.y0, area.w, area.h);
     this.view = null; // sized in render(), once the canvas size is known
   }
 
@@ -353,7 +378,7 @@ export class MapPanel extends Panel {
 
   showWhole() {
     const area = this.areaTiles();
-    this.setView(centeredView(area.w / 2, area.h / 2, this.zoomLimits().min, this.view.width, this.view.height));
+    this.setView(centeredView(area.x0 + area.w / 2, area.y0 + area.h / 2, this.zoomLimits().min, this.view.width, this.view.height));
   }
 
   zoom(factor, px = this.view.width / 2, py = this.view.height / 2) {
@@ -380,9 +405,11 @@ export class MapPanel extends Panel {
     const { game } = this;
     const { width, height } = this.canvasSize();
     const dpr = window.devicePixelRatio || 1;
-    const title = game.inDungeon ? `Dungeon · Lv ${game.area.level}` : "World map";
+    const title = game.inDungeon
+      ? `Dungeon · Lv ${game.area.level}${game.area.floors > 1 ? ` · floor ${game.area.floor + 1} of ${game.area.floors}` : ""}`
+      : "World map";
     const legend = game.inDungeon
-      ? [["portal", "Exit portal", "round"], ["chest", "Treasure", ""], ["ladder", "Ladder out", ""], ["player", "You", "arrow"]]
+      ? [["portal", "Exit portal", "round"], ["stairs", "Stairs", ""], ["chest", "Treasure", ""], ["rope", "Escape rope", ""], ["player", "You", "arrow"]]
       : [["village", "Village", ""], ["dungeon", "Dungeon", ""], ["looted", "Looted dungeon", ""], ["grave", "Your grave", "cross"], ["player", "You", "arrow"]];
 
     this.element.innerHTML = `

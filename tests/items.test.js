@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { MAX_ARROWS } from "../js/config.js";
-import { ARMOR_SLOTS, ITEMS } from "../js/data/items.js";
+import { ARMOR_SLOTS, ITEMS, potionId } from "../js/data/items.js";
 import { BUYBACK_SIZE, VENDORS } from "../js/data/vendors.js";
 import { Player } from "../js/entities/player.js";
 import { Game } from "../js/game.js";
 import { mulberry32 } from "../js/rng.js";
 import { drinkPotion } from "../js/systems/consumables.js";
-import { buyEntry, repurchase, sellFromSlot } from "../js/systems/economy.js";
+import { buyEntry, describeEntry, repurchase, sellFromSlot, vendorStock } from "../js/systems/economy.js";
 import {
   addItem,
   canFit,
@@ -21,6 +21,10 @@ import {
   unequip,
 } from "../js/systems/inventory.js";
 
+const HP1 = potionId("hp", 1);
+const HP3 = potionId("hp", 3);
+const MANA1 = potionId("mana", 1);
+
 let uid = 0;
 const newUid = () => `t${uid++}`;
 
@@ -31,8 +35,16 @@ function bag(size = 4) {
 describe("item data", () => {
   it("prices every item to sell at half (floored), except free starter weapons", () => {
     for (const def of Object.values(ITEMS)) {
-      assert.equal(def.sellPrice, def.tier === "starter" ? 0 : Math.floor(def.buyPrice / 2), def.id);
+      const free = def.type === "weapon" && def.tier === "starter";
+      assert.equal(def.sellPrice, free ? 0 : Math.floor(def.buyPrice / 2), def.id);
     }
+  });
+
+  it("makes potions in levels: health 25 + 10 per level, mana 25 per level, priced by level", () => {
+    assert.deepEqual([1, 2, 10].map((l) => ITEMS[potionId("hp", l)].amount), [25, 35, 115]);
+    assert.deepEqual([1, 2, 10].map((l) => ITEMS[potionId("mana", l)].amount), [25, 50, 250]);
+    assert.deepEqual([ITEMS[HP1].buyPrice, ITEMS[potionId("mana", 4)].buyPrice, ITEMS[potionId("travel", 3)].buyPrice], [20, 80, 150]);
+    assert.equal(potionId("hp", 999), potionId("hp", 60), "past the highest level, the highest");
   });
 
   it("matches the design doc's full-set armor totals", () => {
@@ -51,8 +63,8 @@ describe("item data", () => {
 describe("inventory", () => {
   it("fills stacks before using new slots and caps them at maxStack", () => {
     const slots = bag();
-    assert.equal(addItem(slots, "minor_hp_potion", 15, newUid), 0);
-    assert.equal(addItem(slots, "minor_hp_potion", 10, newUid), 0);
+    assert.equal(addItem(slots, HP1, 15, newUid), 0);
+    assert.equal(addItem(slots, HP1, 10, newUid), 0);
     assert.deepEqual(slots.map((s) => s?.qty ?? 0), [20, 5, 0, 0]);
   });
 
@@ -64,19 +76,19 @@ describe("inventory", () => {
 
   it("probes capacity without changing anything", () => {
     const slots = bag(1);
-    addItem(slots, "minor_hp_potion", 19, newUid);
-    assert.equal(canFit(slots, "minor_hp_potion", 1), true);
-    assert.equal(canFit(slots, "minor_hp_potion", 2), false);
+    addItem(slots, HP1, 19, newUid);
+    assert.equal(canFit(slots, HP1, 1), true);
+    assert.equal(canFit(slots, HP1, 2), false);
     assert.equal(slots[0].qty, 19);
   });
 
   it("takes across stacks, all or nothing", () => {
     const slots = bag();
-    addItem(slots, "minor_hp_potion", 25, newUid);
-    assert.equal(takeItem(slots, "minor_hp_potion", 30), false);
-    assert.equal(countItem(slots, "minor_hp_potion"), 25);
-    assert.equal(takeItem(slots, "minor_hp_potion", 22), true);
-    assert.equal(countItem(slots, "minor_hp_potion"), 3);
+    addItem(slots, HP1, 25, newUid);
+    assert.equal(takeItem(slots, HP1, 30), false);
+    assert.equal(countItem(slots, HP1), 25);
+    assert.equal(takeItem(slots, HP1, 22), true);
+    assert.equal(countItem(slots, HP1), 3);
   });
 });
 
@@ -98,7 +110,7 @@ describe("equipment", () => {
   });
 
   it("refuses to equip potions", () => {
-    const player = playerWith("minor_hp_potion");
+    const player = playerWith(HP1);
     assert.equal(equipFromInventory(player, 0), false);
   });
 
@@ -114,35 +126,35 @@ describe("equipment", () => {
 describe("potions", () => {
   function hurtPlayer() {
     const player = new Player(0, 0);
-    addItem(player.inventory, "minor_hp_potion", 2, newUid);
-    addItem(player.inventory, "greater_hp_potion", 1, newUid);
+    addItem(player.inventory, HP1, 2, newUid);
+    addItem(player.inventory, HP3, 1, newUid);
     player.hp = 10;
     return player;
   }
 
-  it("drinks exactly the chosen type; greater restores 40% of max, floored", () => {
+  it("drinks exactly the chosen potion, restoring its level's amount", () => {
     const player = hurtPlayer();
-    player.stats.end = 7; // 70 max HP → 28
-    const result = drinkPotion(player, "greater_hp_potion");
-    assert.deepEqual([result.restored, player.hp], [28, 38]);
-    assert.deepEqual([countItem(player.inventory, "greater_hp_potion"), countItem(player.inventory, "minor_hp_potion")], [0, 2]);
+    player.stats.end = 7; // 70 max HP
+    const result = drinkPotion(player, HP3);
+    assert.deepEqual([result.restored, player.hp], [45, 55]);
+    assert.deepEqual([countItem(player.inventory, HP3), countItem(player.inventory, HP1)], [0, 2]);
   });
 
   it("shares a 1 s cooldown, skips at full, and reports when there are none", () => {
     const player = hurtPlayer();
-    drinkPotion(player, "minor_hp_potion");
-    assert.equal(drinkPotion(player, "greater_hp_potion").reason, "cooldown");
+    drinkPotion(player, HP1);
+    assert.equal(drinkPotion(player, HP3).reason, "cooldown");
     player.potionCooldown = 0;
     player.hp = 50;
-    assert.equal(drinkPotion(player, "minor_hp_potion").reason, "full");
+    assert.equal(drinkPotion(player, HP1).reason, "full");
     player.mana = 0;
-    assert.equal(drinkPotion(player, "minor_mana_potion").reason, "none");
+    assert.equal(drinkPotion(player, MANA1).reason, "none");
   });
 
   it("caps flat potions at max", () => {
     const player = hurtPlayer();
     player.hp = 40;
-    assert.equal(drinkPotion(player, "minor_hp_potion").restored, 10);
+    assert.equal(drinkPotion(player, HP1).restored, 10);
   });
 });
 
@@ -153,12 +165,28 @@ describe("vendors", () => {
 
   it("buys items into the bag and arrows into the quiver", () => {
     const player = new Player(0, 0);
-    player.gold = 100;
+    player.gold = 200;
     assert.ok(buyEntry(player, ironChest, newUid).ok);
-    assert.equal(player.gold, 20);
+    assert.equal(player.gold, 120);
     assert.equal(countItem(player.inventory, "iron_chest"), 1);
     assert.ok(buyEntry(player, arrows, newUid).ok);
-    assert.deepEqual([player.gold, player.arrows], [10, 50]);
+    assert.deepEqual([player.gold, player.arrows], [90, 50]);
+  });
+
+  it("charges more for arrows as the player levels (1.5 g × level each)", () => {
+    const player = new Player(0, 0);
+    assert.equal(describeEntry(arrows, player).price, 30);
+    player.level = 10;
+    assert.equal(describeEntry(arrows, player).price, 300);
+  });
+
+  it("stocks every potion kind at the player's level and the two below it", () => {
+    const player = new Player(0, 0);
+    const ids = (p) => vendorStock("potionVendor", p).map((e) => e.item);
+    assert.deepEqual(ids(player), [HP1, MANA1, potionId("travel", 1)]);
+    player.level = 7;
+    assert.deepEqual(ids(player).filter((id) => id.startsWith("hp_")), [5, 6, 7].map((l) => potionId("hp", l)));
+    assert.ok(vendorStock("generalVendor", player).some((e) => e.item === "starter_axe"), "tools at the General Vendor");
   });
 
   it("refuses without gold, space, or quiver room", () => {
@@ -198,19 +226,19 @@ describe("vendors", () => {
 describe("Game items", () => {
   it("starts with the design doc kit", () => {
     const { player } = new Game(42);
-    assert.equal(countItem(player.inventory, "minor_hp_potion"), 2);
-    assert.equal(countItem(player.inventory, "minor_mana_potion"), 2);
+    assert.equal(countItem(player.inventory, HP1), 2);
+    assert.equal(countItem(player.inventory, MANA1), 2);
     assert.deepEqual([player.gold, player.arrows, player.armor], [25, 30, 0]);
   });
 
   it("moves stacks and gold between bag and stash", () => {
     const game = new Game(42);
-    const index = game.player.inventory.findIndex((s) => s?.defId === "minor_hp_potion");
+    const index = game.player.inventory.findIndex((s) => s?.defId === HP1);
     assert.ok(game.stashDeposit(index));
-    assert.equal(countItem(game.stash.items, "minor_hp_potion"), 2);
-    assert.equal(countItem(game.player.inventory, "minor_hp_potion"), 0);
+    assert.equal(countItem(game.stash.items, HP1), 2);
+    assert.equal(countItem(game.player.inventory, HP1), 0);
     assert.ok(game.stashWithdraw(game.stash.items.findIndex(Boolean)));
-    assert.equal(countItem(game.player.inventory, "minor_hp_potion"), 2);
+    assert.equal(countItem(game.player.inventory, HP1), 2);
     assert.equal(game.depositGold(Infinity), 25);
     assert.deepEqual([game.player.gold, game.stash.gold], [0, 25]);
   });
@@ -221,7 +249,7 @@ describe("Game items", () => {
     game.player.gold = 90;
     assert.equal(game.stashDepositAll(), 3);
     assert.equal(game.player.inventory.filter(Boolean).length, 0);
-    assert.deepEqual([countItem(game.stash.items, "minor_hp_potion"), countItem(game.stash.items, "iron_helmet")], [2, 1]);
+    assert.deepEqual([countItem(game.stash.items, HP1), countItem(game.stash.items, "iron_helmet")], [2, 1]);
     assert.deepEqual([game.player.gold, game.stash.gold], [90, 0], "gold untouched by the items button");
 
     game.depositGold(Infinity);

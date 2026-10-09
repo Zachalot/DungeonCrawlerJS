@@ -1,9 +1,9 @@
 import { CHUNK_SIZE } from "../config.js";
 import { WEAPONS, WEAPON_ORDER } from "../data/weapons.js";
-import { POTION_PRIORITY } from "../data/items.js";
-import { countItem } from "../systems/inventory.js";
+import { potionLevels } from "../systems/consumables.js";
 import { xpToNext } from "../systems/leveling.js";
-import { maxHp, maxMana, weaponDamage } from "../systems/stats.js";
+import { levelAt } from "../systems/scaling.js";
+import { castManaCost, maxHp, maxMana, totalStats, weaponDamage } from "../systems/stats.js";
 
 const DEBUG_REFRESH_INTERVAL = 0.2; // s
 
@@ -26,8 +26,9 @@ export class Hud {
 
   update(frameTime, game) {
     const { player } = game;
-    this.updateBar(this.hpBar, player.hp, maxHp(player.stats));
-    this.updateBar(this.manaBar, player.mana, maxMana(player.stats));
+    const stats = totalStats(player);
+    this.updateBar(this.hpBar, player.hp, maxHp(stats));
+    this.updateBar(this.manaBar, player.mana, maxMana(stats));
     this.updateBar(this.xpBar, player.xp, xpToNext(player.level), "XP ");
     this.setText(this.level, `Lv ${player.level}`);
     this.setText(this.gold, `${player.gold} g`);
@@ -40,16 +41,15 @@ export class Hud {
       const equipped = player.equipment[weapon.id];
       slot.element.classList.toggle("active", active);
       slot.element.classList.toggle("unequipped", !equipped);
-      this.setText(slot.damage, equipped ? `${weaponDamage(weapon, player.stats, equipped)} dmg` : "none equipped");
-      this.setText(slot.cost, costLabel(weapon, player));
-      slot.element.classList.toggle("empty", !equipped || isOutOfAmmo(weapon, player));
+      this.setText(slot.damage, equipped ? `${weaponDamage(weapon, stats, equipped)} dmg` : "none equipped");
+      this.setText(slot.cost, costLabel(weapon, player, stats));
+      slot.element.classList.toggle("empty", !equipped || isOutOfAmmo(weapon, player, stats));
       const cooldown = active ? player.attackCooldown / weapon.cooldown : 0;
       slot.cooldown.style.transform = `scaleY(${cooldown})`;
     }
 
-    const hpPotions = POTION_PRIORITY.hp.reduce((n, id) => n + countItem(player.inventory, id), 0);
-    const manaPotions = POTION_PRIORITY.mana.reduce((n, id) => n + countItem(player.inventory, id), 0);
-    this.setText(this.potions, `Hold Q   ♥ ${hpPotions}   ◆ ${manaPotions}`);
+    const total = (kind) => potionLevels(player.inventory, kind).reduce((n, p) => n + p.count, 0);
+    this.setText(this.potions, `Hold Q   ♥ ${total("hp")}   ◆ ${total("mana")}   ✦ ${total("travel")}`);
     this.potions.classList.toggle("cooling", player.potionCooldown > 0);
 
     this.updateDebug(frameTime, game);
@@ -76,8 +76,8 @@ export class Hud {
       row("Seed", world.seed),
       row("Tile", `${tx}, ${ty}`),
       row("Chunk", `${Math.floor(tx / CHUNK_SIZE)}, ${Math.floor(ty / CHUNK_SIZE)}`),
-      row("Zone", game.inDungeon ? `Dungeon Lv ${game.area.level}` : game.isPlayerSafe() ? "Village (safe)" : "Wilderness"),
-      row("Zombies", game.zombies.length),
+      row("Zone", zoneLabel(game, tx, ty)),
+      row("Enemies", game.enemies.length),
       row("FPS", fps),
     ].join("");
   }
@@ -109,14 +109,22 @@ function createSlot(container, weapon, number) {
   };
 }
 
-function costLabel(weapon, player) {
+function costLabel(weapon, player, stats) {
   if (weapon.arrowCost) return `${player.arrows} arrows`;
-  if (weapon.manaCost) return `${weapon.manaCost} mana`;
+  if (weapon.manaCost) return `${castManaCost(weapon, stats)} mana`;
   return "free";
 }
 
-function isOutOfAmmo(weapon, player) {
-  return (weapon.arrowCost && player.arrows < weapon.arrowCost) || (weapon.manaCost && player.mana < weapon.manaCost);
+function isOutOfAmmo(weapon, player, stats) {
+  return (weapon.arrowCost && player.arrows < weapon.arrowCost) || (weapon.manaCost && player.mana < castManaCost(weapon, stats));
+}
+
+function zoneLabel(game, tx, ty) {
+  if (game.inDungeon) {
+    const { level, floor, floors } = game.area;
+    return `Dungeon Lv ${level}${floors > 1 ? ` · floor ${floor + 1}/${floors}` : ""}`;
+  }
+  return game.isPlayerSafe() ? "Village (safe)" : `Wilderness Lv ${levelAt(tx, ty)}`;
 }
 
 function row(label, value) {

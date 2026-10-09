@@ -1,18 +1,35 @@
-import { MAX_ARROWS } from "../config.js";
-import { ITEMS } from "../data/items.js";
-import { BUYBACK_SIZE } from "../data/vendors.js";
+import { ARROW_GOLD_PER_LEVEL, MAX_ARROWS, MAX_ITEM_LEVEL } from "../config.js";
+import { ITEMS, potionId } from "../data/items.js";
+import { BUYBACK_SIZE, POTION_LEVELS_SOLD, VENDORS } from "../data/vendors.js";
 import { addItem, canFit, removeFromSlot } from "./inventory.js";
 
-/** Price and display name of a vendor stock entry. */
-export function describeEntry(entry) {
-  if (entry.arrows) return { name: `${entry.arrows} Arrows`, price: entry.price };
+/** A vendor's buyable entries for this player: potion entries expand to item entries by level. */
+export function vendorStock(vendorId, player) {
+  const entries = [];
+  for (const entry of VENDORS[vendorId].stock) {
+    if (!entry.potions) {
+      entries.push(entry);
+      continue;
+    }
+    const top = Math.min(MAX_ITEM_LEVEL, player.level);
+    const bottom = Math.max(1, top - POTION_LEVELS_SOLD + 1);
+    for (const kind of entry.potions) {
+      for (let level = bottom; level <= top; level++) entries.push({ item: potionId(kind, level) });
+    }
+  }
+  return entries;
+}
+
+/** Price and display name of a stock entry. Arrows cost more as the player levels. */
+export function describeEntry(entry, player) {
+  if (entry.arrows) return { name: `${entry.arrows} Arrows`, price: Math.ceil(ARROW_GOLD_PER_LEVEL * player.level * entry.arrows) };
   const def = ITEMS[entry.item];
   return { name: def.name, price: def.buyPrice };
 }
 
 /** Buys one stock entry. Returns { ok } or { ok: false, reason: "gold" | "space" | "quiver" }. */
 export function buyEntry(player, entry, newUid) {
-  const { price } = describeEntry(entry);
+  const { price } = describeEntry(entry, player);
   if (player.gold < price) return { ok: false, reason: "gold" };
   if (entry.arrows) {
     if (player.arrows >= MAX_ARROWS) return { ok: false, reason: "quiver" };

@@ -183,6 +183,8 @@ Every item has a `stats: {}` field (empty in the POC) for future secondary bonus
 - Rocks and trees aren't harvestable yet. Their gameplay role is obstacles you can kite zombies around and chokepoints where you can funnel packs into sword cleaves.
 
 ### 7.2 World generation — fixed now, endless-ready
+
+> **From M9:** the world is endless (the 400 × 400 bound and its tree border are gone), and monster and dungeon levels keep rising every 50 tiles. See `progression-and-crafting.md` §1–§2.
 - **POC world:** fixed at **400 × 400 tiles**, with the village at the center. The world edge is an impassable border of trees.
 - **Seeded:** a seeded PRNG (mulberry32) plus a coordinate hash. The same seed always produces the same world, so the save stores the seed plus changes, not the map.
 - **Endless-ready design.** Even though the POC world is fixed, generation is written as a pure per-chunk function:
@@ -208,6 +210,8 @@ Every item has a `stats: {}` field (empty in the POC) for future secondary bonus
 - HP and mana regenerate quickly here (§4.3).
 
 ### 7.4 Dungeons
+
+> **From M9:** dungeons have 2 floors from level 4 and 3 from level 10, joined by stairs, with at most two enemy types per floor. The ladder became an **escape rope** in the final treasure room, and saves resume on the current floor. From level 5 a visit may have a boss guarding the treasure room. See `progression-and-crafting.md` §2.
 - **Entry:** stand on the entrance and press F. This loads a separate dungeon map; the overworld state is kept in memory.
 - **Layout:** generated from `hash(seed, dungeonId)` using random room placement plus L-shaped corridors: 5–8 rooms, roughly 60 × 60 tiles. The same dungeon always generates the same layout.
 - **Start room:** the exit portal back to the overworld, with no enemies.
@@ -231,6 +235,8 @@ Chest contents are rolled once when the chest is first opened, and the result is
 ---
 
 ## 8. Enemies
+
+> **From M9:** enemies scale with their level, with jumps at walls every 16 levels; jumping slimes (green, red, blue) and four bosses joined the zombie. See `progression-and-crafting.md` §2.
 
 ### 8.1 Level 1 Zombie
 
@@ -309,6 +315,8 @@ Item **instances** are `{ uid, defId, qty }`. Definitions live in code, and only
 
 ### 10.1 Potion Vendor
 
+> **From M9:** potions have levels (health heals 25 + 10 × (N − 1), mana restores 25 × N), the vendor sells your level and the two below it, and travel potions teleport you to the village or visited dungeons. Potions can also be brewed at a Potion Table. See `progression-and-crafting.md` §7.
+
 | Item | Effect | Price |
 |---|---|---|
 | Minor Health Potion | +25 HP | 10 g |
@@ -342,6 +350,8 @@ Starter Sword, Starter Bow, and Starter Staff (equipped), 30 arrows, 2 Minor Hea
 ---
 
 ## 11. Death and Graves (Souls-style)
+
+> **From M9:** an **enchanted** starter weapon is buried like any other gear (plain starters stay with you), so runes on gear are always at risk. See `progression-and-crafting.md` §4.4.
 
 1. **On death,** all equipped armor, all inventory items, and all quiver arrows drop into a **grave** at the death location. Gold is kept. Weapons:
    - Equipped *starter* weapons stay on you, since a fresh set would be handed out anyway.
@@ -544,6 +554,7 @@ js/
 | M6 | Persistence + death | Save slots, autosave triggers, migration, export/import, graves with one-grave rule. *The grave arrow was pulled forward from M7.* |
 | M7 | Maps + polish | Minimap, large map, fog of war, dev panel. *Save format v3 adds the explored map.* |
 | M8 | Accounts + cloud saves | Email/password accounts with reset, three cloud-synced slots per account, offline play, conflict handling, guest mode (see `migration-to-persistent-storage.md`) |
+| M9 | Monsters, bosses, crafting | Endless world, level scaling and walls, slimes, bosses and runes, enchanting and brewing tables, gathering, leveled and travel potions, multi-floor dungeons. *Save format v4.* (see `progression-and-crafting.md`) |
 
 ---
 

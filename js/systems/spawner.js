@@ -6,25 +6,35 @@ import {
   SPAWN_CHECK_INTERVAL,
   TILE_SIZE,
 } from "../config.js";
-import { Zombie, ZombieState } from "../entities/zombie.js";
+import { NORMAL_ENEMIES } from "../data/enemies.js";
+import { Enemy, EnemyState } from "../entities/enemy.js";
+import { Purpose, hash } from "../rng.js";
+import { enemyAtLevel, levelAt, typesAtLevel } from "./scaling.js";
 
 /**
- * Keeps zombies alive only near the player. Each spawn point holds at most one
- * zombie; a killed zombie's point reactivates after ENEMY_RESPAWN_TIME, and
- * only spawns while off-screen.
+ * Keeps overworld enemies alive only near the player. Each spawn point holds at most one
+ * enemy, always the same type, at the level of where it stands (higher farther from the
+ * village). A killed enemy's point reactivates after ENEMY_RESPAWN_TIME, and only spawns
+ * while off-screen.
  */
 export class Spawner {
-  constructor(world, enemyDef, random = Math.random) {
+  constructor(world, random = Math.random) {
     this.world = world;
-    this.enemyDef = enemyDef;
     this.random = random;
-    this.alive = new Map(); // spawnId → zombie
+    this.alive = new Map(); // spawnId → enemy
     this.respawnAt = new Map(); // spawnId → game time
     this.timer = SPAWN_CHECK_INTERVAL; // check on the first update
   }
 
-  /** Adds and removes zombies in `zombies` (mutated in place). `view` is the camera rect in px, or null. */
-  update(dt, time, player, zombies, view) {
+  /** The scaled enemy definition a spawn point produces. */
+  enemyFor(spawn) {
+    const level = levelAt(spawn.tx, spawn.ty);
+    const types = typesAtLevel(level, NORMAL_ENEMIES);
+    return enemyAtLevel(types[hash(this.world.seed, spawn.tx, spawn.ty, Purpose.SPAWN_TYPE) % types.length], level);
+  }
+
+  /** Adds and removes enemies in `enemies` (mutated in place). `view` is the camera rect in px, or null. */
+  update(dt, time, player, enemies, view) {
     this.timer += dt;
     if (this.timer < SPAWN_CHECK_INTERVAL) return;
     this.timer = 0;
@@ -38,30 +48,30 @@ export class Spawner {
           if (this.alive.has(spawn.id)) continue;
           if ((this.respawnAt.get(spawn.id) ?? -Infinity) > time) continue;
           if (isInView(spawn, view)) continue;
-          const zombie = new Zombie(this.enemyDef, spawn, this.random);
-          this.alive.set(spawn.id, zombie);
-          zombies.push(zombie);
+          const enemy = new Enemy(this.enemyFor(spawn), spawn, this.random);
+          this.alive.set(spawn.id, enemy);
+          enemies.push(enemy);
         }
       }
     }
 
-    // Despawn calm zombies whose home chunk drifted far from the player. They respawn when it's near again.
-    for (let i = zombies.length - 1; i >= 0; i--) {
-      const z = zombies[i];
-      const chunkX = Math.floor(z.homeX / TILE_SIZE / CHUNK_SIZE);
-      const chunkY = Math.floor(z.homeY / TILE_SIZE / CHUNK_SIZE);
+    // Despawn calm enemies whose home chunk drifted far from the player. They respawn when it's near again.
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      const chunkX = Math.floor(e.homeX / TILE_SIZE / CHUNK_SIZE);
+      const chunkY = Math.floor(e.homeY / TILE_SIZE / CHUNK_SIZE);
       const far = Math.max(Math.abs(chunkX - playerChunkX), Math.abs(chunkY - playerChunkY)) > ENEMY_DESPAWN_CHUNK_RADIUS;
-      const calm = z.state === ZombieState.IDLE || z.state === ZombieState.RETURN;
+      const calm = e.state === EnemyState.IDLE || e.state === EnemyState.RETURN;
       if (far && calm) {
-        zombies.splice(i, 1);
-        this.alive.delete(z.spawnId);
+        enemies.splice(i, 1);
+        this.alive.delete(e.spawnId);
       }
     }
   }
 
-  onZombieKilled(zombie, time) {
-    this.alive.delete(zombie.spawnId);
-    this.respawnAt.set(zombie.spawnId, time + ENEMY_RESPAWN_TIME);
+  onEnemyKilled(enemy, time) {
+    this.alive.delete(enemy.spawnId);
+    this.respawnAt.set(enemy.spawnId, time + ENEMY_RESPAWN_TIME);
   }
 }
 

@@ -12,8 +12,13 @@ export class Camera {
     this.height = height;
   }
 
-  /** Centers on a point, clamped so the view never leaves the area. Small areas are centered. */
+  /** Centers on a point, clamped so the view never leaves a bounded area (small ones are centered). */
   follow(targetX, targetY, area) {
+    if (area.endless) {
+      this.x = Math.round(targetX - this.width / 2);
+      this.y = Math.round(targetY - this.height / 2);
+      return;
+    }
     this.x = Math.round(clampAxis(targetX - this.width / 2, this.width, area.widthPx));
     this.y = Math.round(clampAxis(targetY - this.height / 2, this.height, area.heightPx));
   }

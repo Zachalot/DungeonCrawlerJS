@@ -1,12 +1,15 @@
 import { MAX_ARROWS } from "../config.js";
 import { EQUIP_SLOTS, ITEMS } from "../data/items.js";
 import { addInstance, createEquipment } from "./inventory.js";
+import { runeCount } from "./stats.js";
 
-const isStarter = (instance) => ITEMS[instance.defId].tier === "starter";
+// A plain starter weapon is worth nothing and handed out again on respawn. An enchanted one
+// counts as real gear: it goes into the grave like anything else.
+const isPlainStarter = (instance) => ITEMS[instance.defId].tier === "starter" && runeCount(instance) === 0;
 
 /**
- * Strips the player's equipment, bag, and arrows into a grave's contents. Equipped starter
- * weapons stay on the player (they'd be handed out again anyway); gold and stats are kept.
+ * Strips the player's equipment, bag, and arrows into a grave's contents. Plain starter weapons
+ * stay on the player (they'd be handed out again anyway); gold, stats, runes, and materials are kept.
  */
 export function buryGear(player) {
   const equipment = createEquipment();
@@ -14,7 +17,7 @@ export function buryGear(player) {
   for (const slot of EQUIP_SLOTS) {
     const piece = player.equipment[slot];
     if (!piece) continue;
-    if (isStarter(piece) && ITEMS[piece.defId].type === "weapon") kept[slot] = piece;
+    if (isPlainStarter(piece) && ITEMS[piece.defId].type === "weapon") kept[slot] = piece;
     else equipment[slot] = piece;
   }
   const contents = { equipment, items: player.inventory.filter(Boolean), arrows: player.arrows };
@@ -30,16 +33,16 @@ export function isGraveEmpty(grave) {
 
 /**
  * Returns grave contents to the player. Each buried piece goes back into its slot if that
- * slot is empty or only holds a starter weapon (the starter moves to the bag, or is dropped
- * if the bag is full: it's free). Otherwise it goes into the bag. Then bag items, then
- * arrows. Whatever doesn't fit stays in the grave. Returns true if the grave is now empty.
+ * slot is empty or only holds a plain starter weapon (the starter moves to the bag, or is
+ * dropped if the bag is full: it's free). Otherwise it goes into the bag. Then bag items,
+ * then arrows. Whatever doesn't fit stays in the grave. Returns true if the grave is now empty.
  */
 export function recoverGrave(player, grave, newUid) {
   for (const slot of EQUIP_SLOTS) {
     const piece = grave.equipment[slot];
     if (!piece) continue;
     const current = player.equipment[slot];
-    if (!current || (isStarter(current) && !isStarter(piece))) {
+    if (!current || (isPlainStarter(current) && !isPlainStarter(piece))) {
       if (current) addInstance(player.inventory, current, newUid);
       player.equipment[slot] = piece;
       grave.equipment[slot] = null;

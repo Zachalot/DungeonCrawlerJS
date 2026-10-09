@@ -3,12 +3,13 @@ import { describe, it } from "node:test";
 
 import { INTERACT_RANGE, STARTING_STATS, TILE_SIZE } from "../js/config.js";
 import { ENEMIES } from "../js/data/enemies.js";
+import { Enemy } from "../js/entities/enemy.js";
 import { Player } from "../js/entities/player.js";
-import { Zombie } from "../js/entities/zombie.js";
 import { Game } from "../js/game.js";
 import { mulberry32 } from "../js/rng.js";
 import { allocatePoints, grantXp, previewStats, respec, respecCost, xpToNext } from "../js/systems/leveling.js";
 import { collectDrops, rollDrops } from "../js/systems/loot.js";
+import { enemyAtLevel } from "../js/systems/scaling.js";
 import { maxHp } from "../js/systems/stats.js";
 import { VILLAGE_NPCS } from "../js/world/village.js";
 
@@ -19,23 +20,29 @@ function newPlayer() {
 }
 
 describe("xp and levels", () => {
-  it("needs 50 × level XP for the next level", () => {
-    assert.deepEqual([1, 2, 3].map(xpToNext), [50, 100, 150]);
+  it("needs 50 × level × 1.08^(level − 1) XP for the next level", () => {
+    assert.deepEqual([1, 2, 3].map(xpToNext), [50, 108, 174]);
+  });
+
+  it("gets slower: same-level kills per level climb as you level", () => {
+    const killsFor = (level) => xpToNext(level) / enemyAtLevel("zombie", level).xp;
+    assert.equal(killsFor(1), 5);
+    assert.ok(killsFor(16) > 15 && killsFor(32) > 3 * killsFor(16) * 0.9, `${killsFor(16)} → ${killsFor(32)}`);
   });
 
   it("levels up after five zombie kills, grants 3 points, and fully heals", () => {
     const player = newPlayer();
     player.hp = 3;
     player.mana = 0;
-    for (let i = 0; i < 4; i++) assert.equal(grantXp(player, ENEMIES.zombie_l1.xp), 0);
-    assert.equal(grantXp(player, ENEMIES.zombie_l1.xp), 1);
+    for (let i = 0; i < 4; i++) assert.equal(grantXp(player, ENEMIES.zombie.xp), 0);
+    assert.equal(grantXp(player, ENEMIES.zombie.xp), 1);
     assert.deepEqual([player.level, player.xp, player.unspentPoints], [2, 0, 3]);
     assert.deepEqual([player.hp, player.mana], [50, 50]);
   });
 
   it("carries overflow XP and can gain several levels at once", () => {
     const player = newPlayer();
-    assert.equal(grantXp(player, 50 + 100 + 20), 2);
+    assert.equal(grantXp(player, 50 + 108 + 20), 2);
     assert.deepEqual([player.level, player.xp, player.unspentPoints], [3, 20, 6]);
   });
 });
@@ -73,7 +80,7 @@ describe("stat allocation", () => {
 describe("respec", () => {
   it("costs 50 g × level and refunds every earned point", () => {
     const player = newPlayer();
-    grantXp(player, 50 + 100); // level 3, 6 points
+    grantXp(player, 50 + 108); // level 3, 6 points
     allocatePoints(player, { str: 6 });
     player.gold = 200;
     assert.equal(respecCost(player.level), 150);
@@ -105,16 +112,16 @@ describe("respec", () => {
 });
 
 describe("drops", () => {
-  it("rolls gold and arrows within the zombie table ranges", () => {
+  it("rolls gold (2–4 × level) and arrows within the zombie table ranges", () => {
     const random = mulberry32(5);
     let goldDrops = 0;
     let arrowDrops = 0;
     const runs = 5000;
     for (let i = 0; i < runs; i++) {
-      const { gold, arrows } = rollDrops("zombie_common", random);
+      const { gold, arrows } = rollDrops(enemyAtLevel("zombie", 1), random);
       if (gold) {
         goldDrops++;
-        assert.ok(gold >= 1 && gold <= 3);
+        assert.ok(gold >= 2 && gold <= 4);
       }
       if (arrows) {
         arrowDrops++;
@@ -137,20 +144,27 @@ describe("drops", () => {
 describe("Game integration", () => {
   it("awards XP and drops when a zombie dies", () => {
     const game = new Game(42, { random: mulberry32(9) });
-    const zombie = new Zombie(ENEMIES.zombie_l1, { id: "z", tx: 10, ty: 10 });
-    game.zombies.push(zombie);
+    const zombie = new Enemy(enemyAtLevel("zombie", 1), { id: "z", tx: 10, ty: 10 });
+    game.enemies.push(zombie);
     const goldBefore = game.player.gold;
-    game.damageZombie(zombie, 10);
+    game.damageEnemy(zombie, 10);
     assert.equal(game.player.xp, 10);
     assert.ok(game.player.gold >= goldBefore);
     assert.ok(game.effects.texts.some((t) => t.text.startsWith("+10 XP")));
   });
 
+  it("gives less XP for an enemy below your level", () => {
+    const game = new Game(42);
+    game.player.level = 3;
+    game.damageEnemy(new Enemy(enemyAtLevel("zombie", 1), { id: "z", tx: 10, ty: 10 }), 10);
+    assert.equal(game.player.xp, 5, "two levels above: 50% of 10");
+  });
+
   it("toasts on level-up", () => {
     const game = new Game(42);
     game.player.xp = 45;
-    const zombie = new Zombie(ENEMIES.zombie_l1, { id: "z", tx: 10, ty: 10 });
-    game.damageZombie(zombie, 10);
+    const zombie = new Enemy(enemyAtLevel("zombie", 1), { id: "z", tx: 10, ty: 10 });
+    game.damageEnemy(zombie, 10);
     assert.equal(game.player.level, 2);
     assert.ok(game.events.some((e) => e.text.startsWith("Level up!")));
   });

@@ -1,11 +1,12 @@
 import { REGEN } from "../config.js";
-import { maxHp, maxMana } from "./stats.js";
+import { maxHp, maxMana, totalStats } from "./stats.js";
 
 /** Regenerates HP and mana; fractions accumulate so stored values stay whole. */
 export function applyRegen(player, dt, { inVillage, inCombat }) {
   const rates = inVillage ? REGEN.village : inCombat ? REGEN.combat : REGEN.idle;
-  player.hp = regenResource(player, "hp", player.hp, maxHp(player.stats), rates.hp * dt);
-  player.mana = regenResource(player, "mana", player.mana, maxMana(player.stats), rates.mana * dt);
+  const stats = totalStats(player);
+  player.hp = regenResource(player, "hp", player.hp, maxHp(stats), rates.hp * dt);
+  player.mana = regenResource(player, "mana", player.mana, maxMana(stats), rates.mana * dt);
 }
 
 function regenResource(player, key, current, max, fractionOfMax) {
