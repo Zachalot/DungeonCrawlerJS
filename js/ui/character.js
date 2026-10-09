@@ -1,6 +1,8 @@
 import { WEAPONS } from "../data/weapons.js";
 import { STAT_KEYS, previewStats, xpToNext } from "../systems/leveling.js";
 import { maxHp, maxMana, weaponDamage } from "../systems/stats.js";
+import { armorSummary } from "./items.js";
+import { Panel } from "./panel.js";
 
 const STAT_INFO = {
   str: { name: "Strength", effect: "Sword damage ×1" },
@@ -18,45 +20,25 @@ const DERIVED = [
 ];
 
 /** Character sheet: stage stat points with a live derived-stat preview, then Confirm or Cancel. */
-export class CharacterSheet {
-  constructor(element, game, { onClose }) {
-    this.element = element;
-    this.game = game;
-    this.onClose = onClose;
+export class CharacterSheet extends Panel {
+  onOpen() {
     this.pending = emptyPending();
-    this.handleClick = (e) => this.onClick(e);
-  }
-
-  open() {
-    this.pending = emptyPending();
-    this.element.addEventListener("click", this.handleClick);
-    this.render();
-  }
-
-  close() {
-    this.element.removeEventListener("click", this.handleClick);
   }
 
   pendingTotal() {
     return STAT_KEYS.reduce((sum, key) => sum + this.pending[key], 0);
   }
 
-  onClick(e) {
-    const button = e.target.closest("button[data-action]");
-    if (!button) return;
-    const { action, stat } = button.dataset;
+  onAction(action, { stat }) {
     const remaining = this.game.player.unspentPoints - this.pendingTotal();
-
     if (action === "add" && remaining > 0) this.pending[stat]++;
     else if (action === "remove" && this.pending[stat] > 0) this.pending[stat]--;
     else if (action === "reset") this.pending = emptyPending();
-    else if (action === "confirm") {
-      if (this.game.allocateStats(this.pending)) this.pending = emptyPending();
-    } else if (action === "close") {
-      this.onClose();
-      return;
+    else if (action === "confirm" && this.game.allocateStats(this.pending)) this.pending = emptyPending();
+    else if (action === "close") {
+      this.callbacks.onClose();
+      return false;
     }
-    this.render();
   }
 
   render() {
@@ -86,7 +68,7 @@ export class CharacterSheet {
 
     this.element.innerHTML = `
       <h2>Character <span class="dim">Level ${player.level}</span></h2>
-      <p class="dim">XP ${player.xp} / ${xpToNext(player.level)} &middot; ${player.gold} g</p>
+      <p class="dim">XP ${player.xp} / ${xpToNext(player.level)} &middot; ${player.gold} g &middot; ${armorSummary(player.armor)}</p>
       <p class="points ${remaining > 0 ? "has-points" : ""}">${remaining} stat point${remaining === 1 ? "" : "s"} available</p>
       <table class="stats">${statRows}</table>
       <h3>Derived</h3>

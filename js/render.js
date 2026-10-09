@@ -39,10 +39,31 @@ const COLORS = {
   swing: "rgba(255, 255, 255, 0.35)",
   npcOutline: "#2e1065",
   prompt: "#fbbf24",
+  chestTrim: "#3f2a14",
+  chestLock: "#fde047",
+  chestInside: "#1c1208",
+  treasure: "#b45309",
+  labelDim: "#9ca3af",
+  lootedOverlay: "rgba(17, 24, 39, 0.55)",
+  dungeonFloor: ["#3a3631", "#36322d", "#3e3a34"],
+  dungeonCrack: "#2a2723",
+  dungeonWall: "#1f1d1b",
+  dungeonWallTop: "#4a4540",
+  dungeonMortar: "#151413",
+  portalOuter: "#4c1d95",
+  portalMid: "#7c3aed",
+  portalCore: "#ddd6fe",
+  tombstone: "#9ca3af",
+  tombstoneEdge: "#4b5563",
+  dirt: "#5b4636",
+  graveArrow: "#e5e7eb",
+  ladderWood: "#a16207",
+  daylight: "rgba(254, 243, 199, 0.45)",
 };
 
 /** Draws every tile intersecting the camera view. */
-export function drawWorld(ctx, world, camera) {
+/** Draws every tile of the current area (overworld or dungeon) intersecting the camera view. */
+export function drawWorld(ctx, area, camera) {
   const startX = Math.floor(camera.x / T);
   const startY = Math.floor(camera.y / T);
   const endX = Math.floor((camera.x + camera.width) / T);
@@ -50,14 +71,18 @@ export function drawWorld(ctx, world, camera) {
 
   for (let ty = startY; ty <= endY; ty++) {
     for (let tx = startX; tx <= endX; tx++) {
-      const { tile, variant } = world.getTileInfo(tx, ty);
+      const { tile, variant } = area.getTileInfo(tx, ty);
       drawTile(ctx, tile, variant, tx * T - camera.x, ty * T - camera.y);
     }
   }
 }
 
-/** Draws "Dungeon · Lv N" labels for entrances in chunks near the view, plus the village name. */
-export function drawLabels(ctx, world, camera) {
+/**
+ * Overworld labels: "Dungeon · Lv N" over entrances near the view (greyed with "Looted"
+ * once cleared), plus the village name. Nothing in dungeons.
+ */
+export function drawLabels(ctx, game, camera) {
+  if (game.inDungeon) return;
   ctx.font = "bold 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
@@ -68,21 +93,42 @@ export function drawLabels(ctx, world, camera) {
   const lastChunkY = Math.floor((camera.y + camera.height) / T / CHUNK_SIZE);
   for (let cy = firstChunkY; cy <= lastChunkY; cy++) {
     for (let cx = firstChunkX; cx <= lastChunkX; cx++) {
-      for (const d of world.getChunk(cx, cy).dungeons) {
-        drawLabel(ctx, `Dungeon · Lv ${d.level}`, (d.tx + 0.5) * T - camera.x, d.ty * T - camera.y - 4);
+      for (const d of game.world.getChunk(cx, cy).dungeons) {
+        const x = d.tx * T - camera.x;
+        const y = d.ty * T - camera.y;
+        const cleared = game.dungeonStatus(d.id).cleared;
+        if (cleared) {
+          ctx.fillStyle = COLORS.lootedOverlay;
+          ctx.fillRect(x, y, T, T);
+        }
+        drawLabel(ctx, `Dungeon · Lv ${d.level}${cleared ? " · Looted" : ""}`, x + T / 2, y - 4, cleared ? COLORS.labelDim : COLORS.label);
       }
     }
   }
   drawLabel(ctx, "Village (safe zone)", VILLAGE_CENTER_TILE * T - camera.x, VILLAGE_ORIGIN * T - camera.y - 6);
 }
 
-/** Draws the player and zombies, sorted by y so lower sprites overlap higher ones. */
+/** Draws the player, zombies, NPCs and chests, sorted by y so lower sprites overlap higher ones. */
 export function drawEntities(ctx, game, alpha, camera) {
   const drawables = [
     { y: game.player.y, draw: () => drawPlayer(ctx, game.player, alpha, camera) },
     ...game.zombies.map((z) => ({ y: z.y, draw: () => drawZombie(ctx, z, alpha, camera) })),
-    ...VILLAGE_NPCS.map((npc) => ({ y: (npc.ty + 0.5) * T, draw: () => drawNpc(ctx, npc, camera) })),
   ];
+  if (game.inDungeon) {
+    const { chest, ladder } = game.area;
+    drawLadder(ctx, ladder.tx * T - camera.x, ladder.ty * T - camera.y);
+    const opened = game.dungeonStatus(game.area.id).chest !== null;
+    drawables.push({
+      y: (chest.ty + 0.5) * T,
+      draw: () => drawChest(ctx, (chest.tx + 0.5) * T - camera.x, (chest.ty + 0.5) * T - camera.y, COLORS.treasure, opened),
+    });
+  } else {
+    drawables.push(...VILLAGE_NPCS.map((npc) => ({ y: (npc.ty + 0.5) * T, draw: () => drawNpc(ctx, npc, camera) })));
+    if (game.grave) {
+      const { x, y } = game.grave;
+      drawables.push({ y, draw: () => drawGrave(ctx, x - camera.x, y - camera.y) });
+    }
+  }
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 }
@@ -238,26 +284,86 @@ function drawZombie(ctx, zombie, alpha, camera) {
   }
 }
 
-/** NPC names, plus an "[F]" prompt over the one in interact range. */
-export function drawNpcLabels(ctx, game, camera) {
-  const nearby = game.nearbyNpc();
+/** Names over NPCs and dungeon fixtures, plus an "[F] …" prompt over the one in interact range. */
+export function drawInteractions(ctx, game, camera) {
+  const nearby = game.nearbyInteractable();
   ctx.font = "bold 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
-  for (const npc of VILLAGE_NPCS) {
-    const x = (npc.tx + 0.5) * T - camera.x;
-    const y = npc.ty * T - camera.y - 2;
-    drawLabel(ctx, npc.name, x, y);
-    if (npc === nearby) {
+  for (const it of game.interactables()) {
+    const x = (it.tx + 0.5) * T - camera.x;
+    const y = it.ty * T - camera.y - (it.kind === "entrance" ? 18 : 2);
+    if (it.kind !== "entrance") drawLabel(ctx, it.name, x, y);
+    if (nearby && it.kind === nearby.kind && it.tx === nearby.tx && it.ty === nearby.ty) {
       ctx.fillStyle = COLORS.prompt;
-      ctx.fillText("[F] Talk", x, y - 14);
+      ctx.fillText(it.prompt, x, y - 14);
     }
   }
+}
+
+/** Arrow at the screen edge pointing to an off-screen grave, with its distance in tiles. */
+export function drawGraveArrow(ctx, game, alpha, camera) {
+  if (!game.grave || game.inDungeon) return;
+  const gx = game.grave.x - camera.x;
+  const gy = game.grave.y - camera.y;
+  const margin = 40;
+  if (gx >= 0 && gy >= 0 && gx <= camera.width && gy <= camera.height) return;
+
+  const pos = game.player.renderPosition(alpha);
+  const px = pos.x - camera.x;
+  const py = pos.y - camera.y;
+  const angle = Math.atan2(gy - py, gx - px);
+  // Walk from the player toward the grave until hitting the inset screen edge.
+  const scale = Math.min(
+    Math.abs((Math.cos(angle) > 0 ? camera.width - margin - px : margin - px) / (Math.cos(angle) || 1e-9)),
+    Math.abs((Math.sin(angle) > 0 ? camera.height - margin - py : margin - py) / (Math.sin(angle) || 1e-9)),
+  );
+  const ax = px + Math.cos(angle) * scale;
+  const ay = py + Math.sin(angle) * scale;
+
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(angle);
+  ctx.fillStyle = COLORS.graveArrow;
+  ctx.strokeStyle = COLORS.labelShadow;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(14, 0);
+  ctx.lineTo(-8, -9);
+  ctx.lineTo(-3, 0);
+  ctx.lineTo(-8, 9);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+  ctx.restore();
+
+  const tiles = Math.round(Math.hypot(game.grave.x - game.player.x, game.grave.y - game.player.y) / T);
+  ctx.font = "bold 11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  drawLabel(ctx, `Grave · ${tiles}`, ax, ay + 12, COLORS.graveArrow);
+}
+
+/** Torchlight: darkens a dungeon except for a soft circle around the player. */
+export function drawDarkness(ctx, game, alpha, camera) {
+  if (!game.inDungeon) return;
+  const pos = game.player.renderPosition(alpha);
+  const sx = pos.x - camera.x;
+  const sy = pos.y - camera.y;
+  const gradient = ctx.createRadialGradient(sx, sy, 3 * T, sx, sy, 11 * T);
+  gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0.82)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, camera.width, camera.height);
 }
 
 function drawNpc(ctx, npc, camera) {
   const sx = (npc.tx + 0.5) * T - camera.x;
   const sy = (npc.ty + 0.5) * T - camera.y;
+  if (npc.kind === "stash") {
+    drawChest(ctx, sx, sy, npc.color, false);
+    return;
+  }
   const r = 11;
   drawShadow(ctx, sx, sy, r);
   ctx.fillStyle = npc.color;
@@ -275,6 +381,64 @@ function drawNpc(ctx, npc, camera) {
   ctx.lineTo(sx + 2, sy - 20);
   ctx.closePath();
   ctx.fill();
+}
+
+/** A ladder in a shaft of daylight, filling the tile whose top-left is (x, y). */
+function drawLadder(ctx, x, y) {
+  const light = ctx.createRadialGradient(x + T / 2, y + T / 2, 2, x + T / 2, y + T / 2, T);
+  light.addColorStop(0, COLORS.daylight);
+  light.addColorStop(1, "rgba(254, 243, 199, 0)");
+  ctx.fillStyle = light;
+  ctx.fillRect(x - T / 2, y - T / 2, T * 2, T * 2);
+
+  ctx.fillStyle = COLORS.ladderWood;
+  ctx.fillRect(x + 8, y - 6, 3, T + 4);
+  ctx.fillRect(x + T - 11, y - 6, 3, T + 4);
+  for (let rung = 0; rung < 4; rung++) ctx.fillRect(x + 8, y - 2 + rung * 8, T - 16, 2);
+}
+
+function drawGrave(ctx, sx, sy) {
+  drawShadow(ctx, sx, sy + 4, 11);
+  ctx.fillStyle = COLORS.dirt;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 8, 12, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = COLORS.tombstone;
+  ctx.strokeStyle = COLORS.tombstoneEdge;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(sx - 9, sy + 8);
+  ctx.lineTo(sx - 9, sy - 6);
+  ctx.arc(sx, sy - 6, 9, Math.PI, 0);
+  ctx.lineTo(sx + 9, sy + 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = COLORS.tombstoneEdge;
+  ctx.fillRect(sx - 1, sy - 9, 2, 11);
+  ctx.fillRect(sx - 4, sy - 6, 8, 2);
+}
+
+/** A wooden chest centered on (sx, sy); `open` draws the lid raised. */
+function drawChest(ctx, sx, sy, color, open) {
+  drawShadow(ctx, sx, sy + 2, 12);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = COLORS.chestTrim;
+  ctx.lineWidth = 2;
+  ctx.fillRect(sx - 12, sy - 6, 24, 14);
+  ctx.strokeRect(sx - 12, sy - 6, 24, 14);
+  if (open) {
+    ctx.fillStyle = COLORS.chestInside;
+    ctx.fillRect(sx - 11, sy - 5, 22, 4);
+    ctx.fillStyle = color;
+    ctx.fillRect(sx - 12, sy - 16, 24, 7);
+    ctx.strokeRect(sx - 12, sy - 16, 24, 7);
+  } else {
+    ctx.fillRect(sx - 12, sy - 12, 24, 7);
+    ctx.strokeRect(sx - 12, sy - 12, 24, 7);
+    ctx.fillStyle = COLORS.chestLock;
+    ctx.fillRect(sx - 2, sy - 7, 4, 5);
+  }
 }
 
 function drawShadow(ctx, sx, sy, r) {
@@ -310,6 +474,25 @@ function drawTile(ctx, tile, variant, x, y) {
     case Tile.DUNGEON_ENTRANCE:
       fill(ctx, pick(COLORS.grass, variant), x, y);
       drawEntrance(ctx, x, y);
+      break;
+    case Tile.DUNGEON_FLOOR:
+      fill(ctx, pick(COLORS.dungeonFloor, variant), x, y);
+      if (variant % 7 === 0) {
+        ctx.fillStyle = COLORS.dungeonCrack;
+        ctx.fillRect(x + (variant % 20) + 4, y + ((variant >> 3) % 20) + 4, 6, 2);
+      }
+      break;
+    case Tile.DUNGEON_WALL:
+      fill(ctx, COLORS.dungeonWall, x, y);
+      ctx.fillStyle = COLORS.dungeonWallTop;
+      ctx.fillRect(x, y, T, 5);
+      ctx.fillStyle = COLORS.dungeonMortar;
+      ctx.fillRect(x, y + 17, T, 2);
+      ctx.fillRect(x + ((variant & 1) ? 10 : 20), y + 5, 2, 12);
+      break;
+    case Tile.EXIT_PORTAL:
+      fill(ctx, pick(COLORS.dungeonFloor, variant), x, y);
+      drawPortal(ctx, x, y);
       break;
     default:
       fill(ctx, pick(COLORS.grass, variant), x, y);
@@ -372,9 +555,20 @@ function drawEntrance(ctx, x, y) {
   for (let i = 0; i < 3; i++) ctx.fillRect(x + 9 + i * 2, y + 13 + i * 5, T - 18 - i * 4, 2);
 }
 
-function drawLabel(ctx, text, x, y) {
+function drawPortal(ctx, x, y) {
+  const cx = x + T / 2;
+  const cy = y + T / 2;
+  for (const [r, color] of [[14, COLORS.portalOuter], [10, COLORS.portalMid], [5, COLORS.portalCore]]) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, r, r * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawLabel(ctx, text, x, y, color = COLORS.label) {
   ctx.fillStyle = COLORS.labelShadow;
   ctx.fillText(text, x + 1, y + 1);
-  ctx.fillStyle = COLORS.label;
+  ctx.fillStyle = color;
   ctx.fillText(text, x, y);
 }

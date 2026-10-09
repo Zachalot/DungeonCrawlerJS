@@ -1,5 +1,7 @@
 import { CHUNK_SIZE } from "../config.js";
 import { WEAPONS, WEAPON_ORDER } from "../data/weapons.js";
+import { POTION_PRIORITY } from "../data/items.js";
+import { countItem } from "../systems/inventory.js";
 import { xpToNext } from "../systems/leveling.js";
 import { maxHp, maxMana, weaponDamage } from "../systems/stats.js";
 
@@ -7,7 +9,8 @@ const DEBUG_REFRESH_INTERVAL = 0.2; // s
 
 /** HP/mana/XP bars, level, gold, weapon slots, and the debug readout. */
 export class Hud {
-  constructor({ debug, hpBar, manaBar, xpBar, level, gold, pointsHint, weapons }) {
+  constructor({ debug, hpBar, manaBar, xpBar, level, gold, pointsHint, weapons, potions }) {
+    this.potions = potions;
     this.debug = debug;
     this.hpBar = hpBar;
     this.manaBar = manaBar;
@@ -42,6 +45,11 @@ export class Hud {
       slot.cooldown.style.transform = `scaleY(${cooldown})`;
     }
 
+    const hpPotions = POTION_PRIORITY.hp.reduce((n, id) => n + countItem(player.inventory, id), 0);
+    const manaPotions = POTION_PRIORITY.mana.reduce((n, id) => n + countItem(player.inventory, id), 0);
+    this.setText(this.potions, `Q ♥ ${hpPotions}   E ◆ ${manaPotions}`);
+    this.potions.classList.toggle("cooling", player.potionCooldown > 0);
+
     this.updateDebug(frameTime, game);
   }
 
@@ -66,7 +74,7 @@ export class Hud {
       row("Seed", world.seed),
       row("Tile", `${tx}, ${ty}`),
       row("Chunk", `${Math.floor(tx / CHUNK_SIZE)}, ${Math.floor(ty / CHUNK_SIZE)}`),
-      row("Zone", game.isPlayerSafe() ? "Village (safe)" : "Wilderness"),
+      row("Zone", game.inDungeon ? `Dungeon Lv ${game.area.level}` : game.isPlayerSafe() ? "Village (safe)" : "Wilderness"),
       row("Zombies", game.zombies.length),
       row("FPS", fps),
     ].join("");

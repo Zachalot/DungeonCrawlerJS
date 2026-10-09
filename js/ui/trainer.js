@@ -1,29 +1,18 @@
 import { STAT_POINTS_PER_LEVEL } from "../config.js";
 import { respecCost } from "../systems/leveling.js";
+import { Panel } from "./panel.js";
 
 /** Respec Trainer dialog: reset all spent stat points for gold. */
-export class TrainerDialog {
-  constructor(element, game, { onClose, onRespec }) {
-    this.element = element;
-    this.game = game;
-    this.onClose = onClose;
-    this.onRespec = onRespec;
-    this.handleClick = (e) => this.onClick(e);
-  }
-
-  open() {
-    this.element.addEventListener("click", this.handleClick);
-    this.render();
-  }
-
-  close() {
-    this.element.removeEventListener("click", this.handleClick);
-  }
-
-  onClick(e) {
-    const action = e.target.closest("button[data-action]")?.dataset.action;
-    if (action === "respec" && this.game.buyRespec()) this.onRespec();
-    else if (action === "close") this.onClose();
+export class TrainerDialog extends Panel {
+  onAction(action) {
+    if (action === "respec" && this.game.buyRespec()) {
+      this.callbacks.onRespec();
+      return false;
+    }
+    if (action === "close") {
+      this.callbacks.onClose();
+      return false;
+    }
   }
 
   render() {

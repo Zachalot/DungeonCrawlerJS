@@ -15,6 +15,15 @@ export const DUNGEON_CELL_MARGIN = 5; // min distance from cell edge
 export const DUNGEON_MIN_VILLAGE_DISTANCE = 15; // Chebyshev tiles from village center
 export const DUNGEON_LEVEL_DISTANCE = 50; // tiles per dungeon level step
 
+// Dungeon interiors.
+export const DUNGEON_SIZE = 60; // tiles per side
+export const DUNGEON_ROOM_COUNT = [5, 8];
+export const DUNGEON_ROOM_SIZE = [6, 11]; // tiles per side, inclusive
+export const DUNGEON_ROOM_GAP = 2; // min wall tiles between rooms
+export const DUNGEON_CORRIDOR_WIDTH = 2;
+export const DUNGEON_ZOMBIES_PER_ROOM = [3, 6];
+export const DUNGEON_PACK_SIZE = [6, 8]; // the room just before the chest
+
 export const ROCK_DENSITY = 0.03;
 export const TREE_DENSITY = 0.05;
 export const ZOMBIE_SPAWN_DENSITY = 0.004; // per overworld grass tile
@@ -37,6 +46,11 @@ export const RESPEC_COST_PER_LEVEL = 50; // gold
 export const INTERACT_RANGE = 1.5; // tiles
 export const PLAYER_IFRAMES = 0.5; // s of invulnerability after taking damage
 export const ATTACK_BUFFER_TIME = 0.2; // s a click made during cooldown waits to fire
+
+// Items.
+export const INVENTORY_SIZE = 24;
+export const STASH_SIZE = 24;
+export const POTION_COOLDOWN = 1; // s, shared by all potions
 export const RESPAWN_IFRAMES = 2; // s
 export const ARMOR_K = 50; // reduction = armor / (armor + ARMOR_K)
 
@@ -59,6 +73,8 @@ export const HIT_FLASH_TIME = 0.1; // s
 export const KNOCKBACK_TIME = 0.1; // s over which knockback distance is applied
 export const DAMAGE_NUMBER_TIME = 0.8; // s
 export const SWING_EFFECT_TIME = 0.15; // s
+
+export const AUTOSAVE_INTERVAL = 60; // s
 
 export const UPDATE_HZ = 60;
 export const MAX_FRAME_TIME = 0.25; // s; caps catch-up after a stall

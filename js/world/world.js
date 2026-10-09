@@ -1,4 +1,4 @@
-import { CHUNK_SIZE } from "../config.js";
+import { CHUNK_SIZE, TILE_SIZE, WORLD_SIZE } from "../config.js";
 import { generateChunk } from "./chunks.js";
 import { isSolid } from "./tiles.js";
 import { isInVillage } from "./village.js";
@@ -6,8 +6,11 @@ import { isInVillage } from "./village.js";
 /** Overworld tile access backed by lazily generated, cached chunks. */
 export class World {
   constructor(seed) {
+    this.kind = "overworld";
     this.seed = seed;
     this.chunks = new Map();
+    this.widthPx = WORLD_SIZE * TILE_SIZE;
+    this.heightPx = WORLD_SIZE * TILE_SIZE;
   }
 
   getChunk(chunkX, chunkY) {

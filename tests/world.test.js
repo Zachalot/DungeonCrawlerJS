@@ -155,7 +155,7 @@ describe("solid tiles", () => {
   it("blocks rocks, trees, walls, and border only", () => {
     assert.deepEqual(
       Object.entries(Tile).filter(([, t]) => isSolid(t)).map(([name]) => name).sort(),
-      ["BORDER", "ROCK", "TREE", "VILLAGE_WALL"],
+      ["BORDER", "DUNGEON_WALL", "ROCK", "TREE", "VILLAGE_WALL"],
     );
   });
 });

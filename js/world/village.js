@@ -15,9 +15,12 @@ export const VILLAGE_SPAWN = Object.freeze({
   y: VILLAGE_CENTER_TILE * TILE_SIZE,
 });
 
-/** Interactable NPCs, one per inner corner of the village. Vendors and the stash join in M4. */
+/** Interactables, one per inner corner of the village. `id` doubles as the panel it opens. */
 export const VILLAGE_NPCS = Object.freeze([
-  { id: "trainer", name: "Respec Trainer", tx: VILLAGE_ORIGIN + 2, ty: VILLAGE_ORIGIN + 2, color: "#8b5cf6" },
+  { id: "trainer", kind: "npc", name: "Respec Trainer", tx: VILLAGE_ORIGIN + 2, ty: VILLAGE_ORIGIN + 2, color: "#8b5cf6" },
+  { id: "potionVendor", kind: "npc", name: "Potion Vendor", tx: VILLAGE_END - 2, ty: VILLAGE_ORIGIN + 2, color: "#ec4899" },
+  { id: "generalVendor", kind: "npc", name: "General Vendor", tx: VILLAGE_ORIGIN + 2, ty: VILLAGE_END - 2, color: "#f59e0b" },
+  { id: "stash", kind: "stash", name: "Stash", tx: VILLAGE_END - 2, ty: VILLAGE_END - 2, color: "#a16207" },
 ]);
 
 /** True for tiles inside the village walls, walls included. */
