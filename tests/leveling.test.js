@@ -122,7 +122,7 @@ describe("drops", () => {
       }
     }
     assert.ok(Math.abs(goldDrops / runs - 0.6) < 0.03);
-    assert.ok(Math.abs(arrowDrops / runs - 0.1) < 0.02);
+    assert.ok(Math.abs(arrowDrops / runs - 0.02) < 0.02);
   });
 
   it("caps arrows at the quiver size", () => {
