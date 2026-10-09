@@ -201,6 +201,7 @@ Every item has a `stats: {}` field (empty in the POC) for future secondary bonus
 - **Layout:** generated from `hash(seed, dungeonId)` using random room placement plus L-shaped corridors: 5–8 rooms, roughly 60 × 60 tiles. The same dungeon always generates the same layout.
 - **Start room:** the exit portal back to the overworld, with no enemies.
 - **End room:** the room farthest from the start (by BFS distance), which holds the **treasure chest**.
+- **Ladder:** a ladder stands two tiles beside the chest, lit by a shaft of daylight. Pressing F on it climbs straight back to the overworld, beside the dungeon's entrance, so a cleared dungeon doesn't have to be walked back through. It works whether or not the chest has been opened, and it autosaves like the exit portal.
 - **Enemies:** 3–6 Level 1 Zombies per room, with a denser pack (6–8) in the room just before the chest room.
 - **Cleared state:** opening the chest marks the dungeon `cleared`. Cleared dungeons respawn zombies on re-entry but never the chest. Their overworld entrance and minimap icon are drawn greyed out ("Looted").
 - **Dungeon level hook:** every dungeon stores `dungeonLevel = 1 + floor(distanceFromVillage / 50)`. The POC spawns Level 1 Zombies regardless, but the level is displayed at the entrance ("Dungeon — Lv 3") so the convention exists before scaling is implemented.
@@ -316,7 +317,8 @@ Item **instances** are `{ uid, defId, qty }`. Definitions live in code, and only
 ### 10.3 Stash (village)
 - 24 slots plus a gold deposit. **Items in the stash are never lost on death.**
 - The stash is what makes the death penalty a strategic choice: you decide what to risk bringing out.
-- Clicking a stack moves the whole stack between bag and stash. Equipped armor has to be unequipped before it can be stashed. Gold moves in 10 g steps or all at once.
+- Clicking a stack, or dragging it to the other grid, moves the whole stack between bag and stash. Equipped armor has to be unequipped before it can be stashed.
+- **Items and gold are handled separately,** because players tend to treat them separately. There are four buttons: Deposit all items, Deposit all gold, Withdraw all items, and Withdraw all gold. If the destination fills up, whatever didn't fit stays where it was.
 
 ### 10.4 Starting kit
 Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 Minor Mana Potions, and 25 g.

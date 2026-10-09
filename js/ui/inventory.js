@@ -29,7 +29,7 @@ export class InventoryPanel extends Panel {
     const doll = ARMOR_SLOTS.map((slot) => {
       const equipped = player.equipment[slot];
       return `<div class="doll-slot">
-        ${equipped ? itemIcon(equipped.defId, 1, `data-action="unequip" data-slot="${slot}"`) : `<div class="item-icon empty"></div>`}
+        ${equipped ? itemIcon(equipped.defId, 1, `data-action="unequip" data-slot="${slot}" data-hint="Click to take off"`) : `<div class="item-icon empty"></div>`}
         <span>${equipped ? ITEMS[equipped.defId].name : `<span class="dim">${SLOT_NAMES[slot]}</span>`}</span>
       </div>`;
     }).join("");
@@ -44,7 +44,7 @@ export class InventoryPanel extends Panel {
         </div>
         <div>
           <h3>Bag</h3>
-          ${slotGrid(player.inventory, (i) => `data-action="use" data-index="${i}"`)}
+          ${slotGrid(player.inventory, (i) => `data-action="use" data-index="${i}" data-hint="${ITEMS[player.inventory[i].defId].type === "armor" ? "Click to equip" : "Click to drink"}"`)}
           <p class="dim small">Click armor to equip it, a potion to drink it, or equipped armor to take it off.</p>
         </div>
       </div>

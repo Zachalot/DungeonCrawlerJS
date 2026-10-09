@@ -15,7 +15,7 @@ const ROOM_ATTEMPTS = 300;
 
 /** A dungeon interior. Same tile-access interface as World, so the game can treat both as an "area". */
 export class Dungeon {
-  constructor({ id, level, entrance, tiles, variants, rooms, portal, chest, zombieSpawns }) {
+  constructor({ id, level, entrance, tiles, variants, rooms, portal, chest, ladder, zombieSpawns }) {
     this.kind = "dungeon";
     this.id = id;
     this.level = level;
@@ -29,6 +29,7 @@ export class Dungeon {
     this.rooms = rooms;
     this.portal = portal; // { tx, ty }, in the start room
     this.chest = chest; // { tx, ty }, in the farthest room
+    this.ladder = ladder; // { tx, ty }, beside the chest: a shortcut back to the surface
     this.zombieSpawns = zombieSpawns; // [{ id, tx, ty }]
   }
 
@@ -88,13 +89,15 @@ export function generateDungeon(seed, entrance) {
   const roomDistance = (r) => distances[center(r).ty * size + center(r).tx];
   const chestRoom = rooms.slice(1).reduce((best, r) => (roomDistance(r) > roomDistance(best) ? r : best));
   const chest = center(chestRoom);
+  // Two tiles east of the chest: rooms are at least 6 wide and the chest sits at x + floor(w/2), so this stays inside.
+  const ladder = { tx: chest.tx + 2, ty: chest.ty };
   const packRoom = roomBeforeChest(rooms, chestRoom, startRoom, chest, parents);
 
   const zombieSpawns = [];
   for (const room of rooms) {
     if (room === startRoom) continue;
     const [min, max] = room === packRoom ? DUNGEON_PACK_SIZE : DUNGEON_ZOMBIES_PER_ROOM;
-    const used = new Set([`${chest.tx},${chest.ty}`]);
+    const used = new Set([`${chest.tx},${chest.ty}`, `${ladder.tx},${ladder.ty}`]);
     const count = randomInt(random, min, max);
     for (let n = 0; n < count; n++) {
       let tx, ty;
@@ -107,7 +110,7 @@ export function generateDungeon(seed, entrance) {
     }
   }
 
-  return new Dungeon({ id: entrance.id, level: entrance.level, entrance, tiles, variants, rooms, portal, chest, zombieSpawns });
+  return new Dungeon({ id: entrance.id, level: entrance.level, entrance, tiles, variants, rooms, portal, chest, ladder, zombieSpawns });
 }
 
 function placeRooms(random) {

@@ -12,7 +12,7 @@ See [dungeon-crawler-design-doc.md](dungeon-crawler-design-doc.md) for the full 
 
 ## How to play
 
-You start in the walled village, where zombies can't reach you. Gear up, head into the wilderness, and find dungeons; there's about one every 50 tiles. Clear a dungeon to reach the treasure chest in its farthest room. If you die, your armor, bag, and arrows drop into a grave where you fell. Walk back and press F to recover them. Die again before you do, and the first grave is gone for good.
+You start in the walled village, where zombies can't reach you. Gear up, head into the wilderness, and find dungeons; there's about one every 50 tiles. Clear a dungeon to reach the treasure chest in its farthest room, then climb the ladder beside it straight back to the surface. If you die, your armor, bag, and arrows drop into a grave where you fell. Walk back and press F to recover them. Die again before you do, and the first grave is gone for good.
 
 | Input | Action |
 |---|---|
@@ -35,7 +35,8 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 - **Zombies** have 10 HP and deal 2 damage. Watch for the red windup: stepping back before it ends dodges the hit. They can't enter the village.
 - **Leveling:** zombies give 10 XP plus a chance of gold and arrows. Each level needs `50 × level` XP and grants 3 stat points.
 - **Armor** reduces damage by `armor / (armor + 50)`. Leather and Iron sets are sold in the village; Steel only comes from dungeon chests.
-- **The village** has a Potion Vendor (NE), a General Vendor who also buys your loot (SW), a Respec Trainer (NW), and a Stash (SE). Anything in the stash is safe from death.
+- **The village** has a Potion Vendor (NE), a General Vendor who also buys your loot (SW), a Respec Trainer (NW), and a Stash (SE). Anything in the stash is safe from death. Click or drag stacks between your bag and the stash, or use the separate "all items" and "all gold" buttons.
+- **Hover any item** to see its stats and what clicking it does.
 - **Menus pause the game.**
 
 ## Saving

@@ -213,6 +213,35 @@ describe("Game items", () => {
     assert.deepEqual([game.player.gold, game.stash.gold], [0, 25]);
   });
 
+  it("deposits and withdraws all items without touching gold, and vice versa", () => {
+    const game = new Game(42);
+    addItem(game.player.inventory, "iron_helmet", 1, game.newUid);
+    game.player.gold = 90;
+    assert.equal(game.stashDepositAll(), 3);
+    assert.equal(game.player.inventory.filter(Boolean).length, 0);
+    assert.deepEqual([countItem(game.stash.items, "minor_hp_potion"), countItem(game.stash.items, "iron_helmet")], [2, 1]);
+    assert.deepEqual([game.player.gold, game.stash.gold], [90, 0], "gold untouched by the items button");
+
+    game.depositGold(Infinity);
+    assert.deepEqual([game.player.gold, game.stash.gold], [0, 90]);
+    assert.equal(game.stash.items.filter(Boolean).length, 3, "items untouched by the gold button");
+
+    assert.equal(game.stashWithdrawAll(), 3);
+    assert.equal(game.stash.items.filter(Boolean).length, 0);
+    game.withdrawGold(Infinity);
+    assert.deepEqual([game.player.gold, game.stash.gold], [90, 0]);
+  });
+
+  it("keeps what doesn't fit when depositing all into a nearly full stash", () => {
+    const game = new Game(42);
+    game.stash.items.fill({ uid: "s", defId: "steel_boots", qty: 1 });
+    game.stash.items[0] = null;
+    game.events.length = 0;
+    assert.equal(game.stashDepositAll(), 1);
+    assert.equal(game.player.inventory.filter(Boolean).length, 1);
+    assert.ok(game.events.some((e) => e.text.startsWith("Stash full")));
+  });
+
   it("reduces zombie damage with equipped armor", () => {
     const game = new Game(42, { random: mulberry32(4) });
     for (const slot of ARMOR_SLOTS) game.player.equipment[slot] = { uid: slot, defId: `steel_${slot}`, qty: 1 };

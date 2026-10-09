@@ -51,7 +51,7 @@ export class VendorDialog extends Panel {
     if (this.tab === "sell") {
       return `${slotGrid(player.inventory, (i) => {
         const def = ITEMS[player.inventory[i].defId];
-        return `data-action="sell" data-index="${i}" data-price="${def.sellPrice}"`;
+        return `data-action="sell" data-index="${i}" data-price="${def.sellPrice}" data-hint="Click to sell one"`;
       })}<p class="dim small">Click an item to sell one for half its price.</p>`;
     }
     if (this.tab === "buyback") {

@@ -55,6 +55,9 @@ describe("dungeon generation", () => {
 
         const seen = reachable(d, d.portal);
         assert.ok(seen.has(`${d.chest.tx},${d.chest.ty}`), `${d.id}: chest unreachable`);
+        assert.ok(seen.has(`${d.ladder.tx},${d.ladder.ty}`), `${d.id}: ladder unreachable`);
+        const chestRoom = d.rooms.find((r) => d.chest.tx >= r.x && d.chest.tx < r.x + r.w && d.chest.ty >= r.y && d.chest.ty < r.y + r.h);
+        assert.ok(d.ladder.tx < chestRoom.x + chestRoom.w, `${d.id}: ladder outside the chest room`);
         for (const s of d.zombieSpawns) assert.ok(seen.has(`${s.tx},${s.ty}`), `${d.id}: zombie ${s.id} walled in`);
         const startTile = { tx: Math.floor(d.start.x / T), ty: Math.floor(d.start.y / T) };
         assert.ok(seen.has(`${startTile.tx},${startTile.ty}`), `${d.id}: arrival tile is solid`);
@@ -144,6 +147,19 @@ describe("Game dungeons", () => {
     game.interact();
     assert.ok(game.zombies.length >= 15, "zombies restocked");
     assert.equal(game.chestContents, first);
+  });
+
+  it("climbs the ladder beside the chest straight back out to the entrance", () => {
+    const { game, entrance } = gameAtEntrance();
+    game.interact();
+    const { ladder } = game.area;
+    game.player.teleport((ladder.tx + 0.5) * T, (ladder.ty + 1) * T);
+    assert.equal(game.nearbyInteractable().kind, "ladder");
+    game.events.length = 0;
+    assert.equal(game.interact(), null);
+    assert.equal(game.inDungeon, false);
+    assert.deepEqual([game.player.tileX, game.player.tileY], [entrance.tx, entrance.ty + 1]);
+    assert.ok(game.events.some((e) => e.type === "autosave"));
   });
 
   it("leaves items that don't fit in the chest", () => {

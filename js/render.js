@@ -57,6 +57,8 @@ const COLORS = {
   tombstoneEdge: "#4b5563",
   dirt: "#5b4636",
   graveArrow: "#e5e7eb",
+  ladderWood: "#a16207",
+  daylight: "rgba(254, 243, 199, 0.45)",
 };
 
 /** Draws every tile intersecting the camera view. */
@@ -113,7 +115,8 @@ export function drawEntities(ctx, game, alpha, camera) {
     ...game.zombies.map((z) => ({ y: z.y, draw: () => drawZombie(ctx, z, alpha, camera) })),
   ];
   if (game.inDungeon) {
-    const { chest } = game.area;
+    const { chest, ladder } = game.area;
+    drawLadder(ctx, ladder.tx * T - camera.x, ladder.ty * T - camera.y);
     const opened = game.dungeonStatus(game.area.id).chest !== null;
     drawables.push({
       y: (chest.ty + 0.5) * T,
@@ -378,6 +381,20 @@ function drawNpc(ctx, npc, camera) {
   ctx.lineTo(sx + 2, sy - 20);
   ctx.closePath();
   ctx.fill();
+}
+
+/** A ladder in a shaft of daylight, filling the tile whose top-left is (x, y). */
+function drawLadder(ctx, x, y) {
+  const light = ctx.createRadialGradient(x + T / 2, y + T / 2, 2, x + T / 2, y + T / 2, T);
+  light.addColorStop(0, COLORS.daylight);
+  light.addColorStop(1, "rgba(254, 243, 199, 0)");
+  ctx.fillStyle = light;
+  ctx.fillRect(x - T / 2, y - T / 2, T * 2, T * 2);
+
+  ctx.fillStyle = COLORS.ladderWood;
+  ctx.fillRect(x + 8, y - 6, 3, T + 4);
+  ctx.fillRect(x + T - 11, y - 6, 3, T + 4);
+  for (let rung = 0; rung < 4; rung++) ctx.fillRect(x + 8, y - 2 + rung * 8, T - 16, 2);
 }
 
 function drawGrave(ctx, sx, sy) {

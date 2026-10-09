@@ -15,9 +15,12 @@ export function itemIcon(defId, qty = 1, attrs = "") {
   </div>`;
 }
 
-/** A grid of slots; empty slots render as blanks. `attrsFor(i)` supplies per-slot data attributes. */
-export function slotGrid(slots, attrsFor) {
-  return `<div class="slot-grid">${slots
+/**
+ * A grid of slots; empty slots render as blanks. `attrsFor(i)` supplies per-item data
+ * attributes; `gridAttrs` goes on the grid itself (e.g. a drop-zone marker).
+ */
+export function slotGrid(slots, attrsFor, gridAttrs = "") {
+  return `<div class="slot-grid" ${gridAttrs}>${slots
     .map((slot, i) => (slot ? itemIcon(slot.defId, slot.qty, attrsFor(i)) : `<div class="item-icon empty"></div>`))
     .join("")}</div>`;
 }
@@ -57,7 +60,8 @@ export class Tooltip {
         return;
       }
       const price = target.dataset.price === undefined ? undefined : Number(target.dataset.price);
-      this.element.innerHTML = describeItem(target.dataset.item, this.game().player, { price });
+      const hint = target.dataset.hint ? `<br><span class="hint">${target.dataset.hint}</span>` : "";
+      this.element.innerHTML = describeItem(target.dataset.item, this.game().player, { price }) + hint;
       this.element.hidden = false;
     });
     document.addEventListener("mousemove", (e) => {

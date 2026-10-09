@@ -521,8 +521,24 @@ body {
 
 .gold-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.slot-grid.drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.item-icon[draggable="true"] {
+  cursor: grab;
+}
+
+.tooltip .hint {
+  color: #a3e635;
+  font-size: 11px;
 }
 
 .tabs {

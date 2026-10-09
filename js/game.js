@@ -287,11 +287,12 @@ export class Game {
   /** Everything the player could interact with in the current area: [{ kind, name, prompt, tx, ty, ... }]. */
   interactables() {
     if (this.inDungeon) {
-      const { portal, chest, id } = this.area;
+      const { portal, chest, ladder, id } = this.area;
       const looted = this.dungeonStatus(id).chest !== null;
       return [
         { kind: "portal", name: "Exit", prompt: "[F] Leave dungeon", ...portal },
         { kind: "chest", name: "Treasure", prompt: looted ? "[F] Look inside" : "[F] Open chest", ...chest },
+        { kind: "ladder", name: "Ladder", prompt: "[F] Climb to the surface", ...ladder },
       ];
     }
     const list = VILLAGE_NPCS.map((npc) => ({ ...npc, prompt: npc.kind === "stash" ? "[F] Open" : "[F] Talk" }));
@@ -347,6 +348,10 @@ export class Game {
         return null;
       case "portal":
         this.exitDungeon();
+        return null;
+      case "ladder":
+        this.exitDungeon();
+        this.toast("You climb the ladder back to the surface.");
         return null;
       case "chest":
         this.openChest();
@@ -501,12 +506,32 @@ export class Game {
     return this.moveStack(this.stash.items, stashIndex, this.player.inventory, "Inventory full");
   }
 
+  /** Moves every bag stack into the stash. Gold is separate (depositGold). Returns stacks moved. */
+  stashDepositAll() {
+    return this.moveAllStacks(this.player.inventory, this.stash.items, "Stash full: some items stayed in your bag");
+  }
+
+  /** Moves every stash stack into the bag. Gold is separate (withdrawGold). Returns stacks moved. */
+  stashWithdrawAll() {
+    return this.moveAllStacks(this.stash.items, this.player.inventory, "Inventory full: some items stayed in the stash");
+  }
+
+  moveAllStacks(from, to, fullMessage) {
+    let moved = 0;
+    for (let i = 0; i < from.length; i++) {
+      if (from[i] && this.moveStack(from, i, to, null)) moved++;
+    }
+    if (from.some(Boolean)) this.toast(fullMessage);
+    return moved;
+  }
+
+  /** Moves one stack (partially, if only some fits). `fullMessage` is toasted when nothing fits; null to stay quiet. */
   moveStack(from, index, to, fullMessage) {
     const instance = from[index];
     if (!instance) return false;
     const leftover = addInstance(to, instance, this.newUid);
     if (leftover === instance.qty) {
-      this.toast(fullMessage);
+      if (fullMessage) this.toast(fullMessage);
       return false;
     }
     if (leftover === 0) from[index] = null;
