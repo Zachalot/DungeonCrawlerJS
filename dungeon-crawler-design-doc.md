@@ -311,9 +311,12 @@ Item **instances** are `{ uid, defId, qty }`. Definitions live in code, and only
 - **Buys:** any item at 50% of its buy price, including chest-only Steel armor (50–150 g).
 - **Buyback tab:** the last 10 items sold, repurchasable at the price they sold for. The list is cleared on save load.
 
+- **The Potion Vendor only sells;** the General Vendor is the one who buys. Vendors sell one unit per click, and you sell one unit per click.
+
 ### 10.3 Stash (village)
 - 24 slots plus a gold deposit. **Items in the stash are never lost on death.**
 - The stash is what makes the death penalty a strategic choice: you decide what to risk bringing out.
+- Clicking a stack moves the whole stack between bag and stash. Equipped armor has to be unequipped before it can be stashed. Gold moves in 10 g steps or all at once.
 
 ### 10.4 Starting kit
 Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 Minor Mana Potions, and 25 g.
@@ -327,9 +330,10 @@ Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 
 3. **Recovery:** walk to the grave and press F to restore everything. Armor re-equips into its original slots; if the inventory is full, the overflow stays in the grave.
 4. **One grave at a time.** Dying again before recovery permanently destroys the previous grave and its contents, and a new grave is created at the new death location. This is the real "lose everything" moment.
 5. **Dying in a dungeon** places the grave just outside that dungeon's overworld entrance, so recovery doesn't require re-clearing the dungeon.
-6. **Visibility:** the grave is always shown on the minimap and the large map, even in unexplored fog, and an edge-of-screen arrow points to it when it's off-screen.
+6. **Visibility:** an edge-of-screen arrow labelled with the distance in tiles points to the grave whenever it's off-screen on the overworld. *(Pulled forward from M7.)* From M7, the grave is also shown on the minimap and the large map, even in unexplored fog.
 7. **Zombies near the grave behave normally,** so the run back carries real risk. Zombie spawns are not boosted near graves in the POC.
-8. **The game saves immediately on death,** before the respawn, so refreshing the page can't undo a death.
+8. **The game saves in the same frame as the death,** right after the grave is created and you respawn, so refreshing the page can't undo a death.
+9. **If you die with nothing to bury** (empty bag, no armor, no arrows), no grave is created, but any previous grave is still destroyed.
 
 ---
 
@@ -368,29 +372,33 @@ Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 
 ## 13. Persistence (localStorage)
 
 ### 13.1 Save schema
+As implemented in `js/save.js` (v1):
 ```json
 {
   "version": 1,
   "seed": 1234567,
-  "savedAt": "2026-10-08T12:00:00Z",
+  "savedAt": "2026-10-09T12:00:00.000Z",
+  "playTime": 754,
+  "nextUid": 31,
   "player": {
     "x": 6400, "y": 6400,
     "location": { "type": "overworld" },
     "level": 3, "xp": 40, "unspentPoints": 0,
     "stats": { "str": 8, "int": 5, "dex": 7, "end": 7 },
-    "hp": 62, "mana": 50, "gold": 112, "arrows": 44,
-    "equipment": { "helmet": { "uid": "a1", "defId": "leather_helmet" }, "...": "..." },
-    "inventory": [ { "uid": "b2", "defId": "minor_hp_potion", "qty": 3 }, null ]
+    "hp": 62, "mana": 50, "gold": 112, "arrows": 44, "weapon": "sword",
+    "equipment": { "helmet": { "uid": "i4", "defId": "leather_helmet", "qty": 1 }, "chest": null, "...": "..." },
+    "inventory": [ { "uid": "i1", "defId": "minor_hp_potion", "qty": 3 }, null, "... 24 slots" ]
   },
-  "stash": { "gold": 0, "items": [] },
-  "grave": { "x": 7100, "y": 6950, "equipment": {}, "items": [], "arrows": 12 },
-  "dungeons": { "3_5": { "cleared": true } },
-  "chests": { "3_5": { "opened": true, "remaining": [] } },
-  "explored": { "12_9": "<base64 1024-bit bitset>" }
+  "stash": { "gold": 0, "items": [null, "... 24 slots"] },
+  "grave": { "x": 7100, "y": 6950, "equipment": { "...": "..." }, "items": [], "arrows": 12 },
+  "dungeons": { "3_5": { "cleared": true, "chest": { "gold": 0, "items": [{ "arrows": 100 }] } } }
 }
 ```
-- `explored` and `dungeons` are keyed by chunk and dungeon-cell coordinates. They are sparse maps rather than fixed arrays, so they work for an endless world without a migration.
+- `dungeons` is keyed by dungeon-cell coordinates. It's a sparse map rather than a fixed array, so it works for an endless world without a migration. M7 adds a similarly keyed `explored` map of per-chunk fog bitsets.
+- A chest's contents are rolled on first open and saved from then on. `chest: null` means the chest is unopened.
 - Live enemy positions are **not** saved. They are regenerated from the seed on load.
+- **A save made inside a dungeon resumes at that dungeon's exit portal,** with a fresh set of zombies.
+- **The URL's `?seed=` no longer carries a world.** Progress lives in save slots; a `?seed=` in the URL only pre-fills the New game seed box on the title screen.
 
 ### 13.2 Rules
 - **Three save slots:** `dungeonCrawler.slot1` / `slot2` / `slot3`. The title screen shows level, play time, and last-saved time for each slot.
@@ -407,7 +415,9 @@ Starter Sword, Starter Bow, Starter Staff, 30 arrows, 2 Minor Health Potions, 2 
   - Export copies the save JSON (base64-encoded) to the clipboard.
   - Import is a paste box that validates and migrates the save before loading it.
   - This doubles as a debugging and sharing tool, and as a backup in case browser data is cleared.
-- **Size check:** warn in the console if a save exceeds 1 MB. That's well under the ~5 MB `localStorage` limit, but it's an early signal for when the world becomes endless.
+- **Size check:** warn in the console if a save exceeds 1 MB. That's well under the ~5 MB `localStorage` limit, but it's an early signal for when the world becomes endless. A typical v1 save is about 1–2 KB.
+- **Title screen:** each slot offers Continue, New game (with an optional seed), or Delete, which asks for a second click to confirm. An unreadable slot shows its error instead of breaking the screen.
+- **Pause menu (Esc):** Resume, Save now, Export save, and Save & quit to title. A small "Autosaved" note fades in at the bottom right on every save.
 
 ---
 
@@ -489,19 +499,22 @@ js/
 | M1 | World + movement | Seeded chunked overworld, village, rocks and trees render; the player walks with collision; the camera follows |
 | M2 | Combat | Sword (cleave + knockback), bow (arrows), and staff (mana) work; Level 1 Zombies chase, wind up, attack, and die; i-frames and damage numbers work. *Regen was pulled forward from M3 so the staff stays usable, and death temporarily respawns you in the village with no penalty until M6.* |
 | M3 | Progression | XP, level-up full heal, stat allocation with preview, Respec Trainer. *Zombie gold/arrow drops were pulled forward from M4 so the respec can be paid for.* |
-| M4 | Items + vendors | Inventory, equipment, armor mitigation, both vendors with buyback, potions with cooldown, stash |
-| M5 | Dungeons | Entrances spawn per cell, dungeons generate, chest loot works, cleared state, level label on entrances |
-| M6 | Persistence + death | Save slots, autosave triggers, migration, export/import, graves with one-grave rule |
-| M7 | Maps + polish | Minimap, large map, fog of war, grave arrow, tooltips with comparison, toasts, dev panel |
+| M4 | Items + vendors | Inventory, equipment, armor mitigation, both vendors with buyback, potions with cooldown, stash. *Tooltips with comparison were pulled forward from M7.* |
+| M5 | Dungeons | Entrances spawn per cell, dungeons generate, chest loot works, cleared state, level label on entrances. *Dungeons also got a torchlight vignette.* |
+| M6 | Persistence + death | Save slots, autosave triggers, migration, export/import, graves with one-grave rule. *The grave arrow was pulled forward from M7.* |
+| M7 | Maps + polish | Minimap, large map, fog of war, dev panel |
 
 ---
 
 ## 16. Remaining Open Questions
 
-1. **Art:** colored shapes for the POC **[Default]**, or a free CC0 tileset (e.g. Kenney.nl)?
-2. **Arrows:** a dedicated quiver counter **[Default]**, or regular inventory stacks?
-3. **Respec cost:** is `50 g × level` OK?
-4. **Should arrows drop into the grave** on death **[Default: yes]**, or stay with the player like gold?
+Items marked *(implemented)* are built with the default and easy to change.
+
+1. **Art:** colored shapes for the POC **[Default]** *(implemented)*, or a free CC0 tileset (e.g. Kenney.nl)?
+2. **Arrows:** a dedicated quiver counter **[Default]** *(implemented)*, or regular inventory stacks?
+3. **Respec cost:** is `50 g × level` OK? *(implemented)*
+4. **Should arrows drop into the grave** on death **[Default: yes]** *(implemented)*, or stay with the player like gold?
+5. **Potion cooldown in menus:** the 1 s cooldown also applies when drinking from the inventory. Because menus pause the game, the cooldown doesn't tick while one is open, so you can drink only one potion per menu visit. Keep that, or make menu drinking ignore the cooldown?
 
 ---
 

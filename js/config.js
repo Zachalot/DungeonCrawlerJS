@@ -74,5 +74,7 @@ export const KNOCKBACK_TIME = 0.1; // s over which knockback distance is applied
 export const DAMAGE_NUMBER_TIME = 0.8; // s
 export const SWING_EFFECT_TIME = 0.15; // s
 
+export const AUTOSAVE_INTERVAL = 60; // s
+
 export const UPDATE_HZ = 60;
 export const MAX_FRAME_TIME = 0.25; // s; caps catch-up after a stall

@@ -1,0 +1,38 @@
+name: Enhancement or idea
+description: Suggest a new feature, a balance change, or a way to make the game more fun.
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Combat and weapons
+        - Enemies
+        - Items, armor, and vendors
+        - Leveling and stats
+        - Dungeons and the world
+        - Death, graves, and saving
+        - UI and controls
+        - Story and dialogue
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      placeholder: Zombies should drop a rare "Rotten Heart" that sells for 25 g.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+      description: What problem does it solve, or what would it make better?
+      placeholder: Early gold is slow, so buying the first Iron armor piece takes a long time.
+  - type: textarea
+    id: numbers
+    attributes:
+      label: Suggested numbers (optional)
+      description: For balance ideas. Most tunables live in js/config.js and js/data/.

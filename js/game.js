@@ -17,6 +17,7 @@ import { Projectile } from "./entities/projectile.js";
 import { Zombie } from "./entities/zombie.js";
 import { isInArc, mitigate } from "./systems/combat.js";
 import { drinkBestPotion } from "./systems/consumables.js";
+import { buryGear, isGraveEmpty, recoverGrave } from "./systems/death.js";
 import { buyEntry, repurchase, sellFromSlot } from "./systems/economy.js";
 import { Effects } from "./systems/effects.js";
 import { addInstance, addItem, createSlots, equipFromInventory, unequip } from "./systems/inventory.js";
@@ -80,6 +81,8 @@ export class Game {
     this.dungeonState = new Map(); // dungeon id → { cleared, chest: { gold, items } | null }
     this.overworldZombies = null; // parked while the player is in a dungeon
     this.wasSafe = true;
+    this.grave = null; // { x, y, equipment, items, arrows }; at most one
+    this.playTime = 0; // s, unpaused
 
     // Zombies treat the village as solid so they can never enter it.
     this.zombieSolids = {
@@ -97,6 +100,7 @@ export class Game {
    */
   update(dt, controls) {
     this.time += dt;
+    this.playTime += dt;
     const player = this.player;
 
     if (controls.weapon && WEAPONS[controls.weapon]) player.weapon = controls.weapon;
@@ -291,6 +295,9 @@ export class Game {
       ];
     }
     const list = VILLAGE_NPCS.map((npc) => ({ ...npc, prompt: npc.kind === "stash" ? "[F] Open" : "[F] Talk" }));
+    if (this.grave) {
+      list.push({ kind: "grave", name: "Your grave", prompt: "[F] Recover gear", tx: Math.floor(this.grave.x / T), ty: Math.floor(this.grave.y / T) });
+    }
     const entrance = dungeonForTile(this.world.seed, this.player.tileX, this.player.tileY);
     if (entrance) {
       const cleared = this.dungeonStatus(entrance.id).cleared;
@@ -344,6 +351,9 @@ export class Game {
       case "chest":
         this.openChest();
         return "chest";
+      case "grave":
+        this.recoverGrave();
+        return null;
       default:
         return null;
     }
@@ -356,7 +366,8 @@ export class Game {
     return this.dungeonState.get(id);
   }
 
-  enterDungeon(entrance) {
+  /** `silent` skips the toast and autosave (used when restoring a save made inside a dungeon). */
+  enterDungeon(entrance, { silent = false } = {}) {
     const dungeon = generateDungeon(this.world.seed, entrance);
     this.overworldZombies = this.zombies;
     this.area = dungeon;
@@ -365,6 +376,7 @@ export class Game {
     this.projectiles = [];
     this.player.teleport(dungeon.start.x, dungeon.start.y);
     this.wasSafe = false;
+    if (silent) return;
     const cleared = this.dungeonStatus(dungeon.id).cleared;
     this.toast(`Entered a level ${dungeon.level} dungeon${cleared ? " (already looted)" : ""}. The treasure lies in the farthest room.`);
     this.autosave("dungeon");
@@ -536,10 +548,21 @@ export class Game {
 
   // ---- Death --------------------------------------------------------------
 
-  // Placeholder until graves (M6): full restore at the village, no item loss.
+  /**
+   * Souls-style death: armor, bag, and arrows drop into a grave (outside the entrance if
+   * you died in a dungeon). Only one grave exists; dying again destroys the old one.
+   * You respawn in the village with full HP/mana, your gold, and the starter weapons.
+   */
   onPlayerDeath() {
-    this.exitDungeon({ toVillage: true });
     const player = this.player;
+    const where = this.inDungeon
+      ? { x: (this.area.entrance.tx + 0.5) * T, y: (this.area.entrance.ty + 1.5) * T }
+      : { x: player.x, y: player.y };
+    const lostPrevious = this.grave !== null;
+    const grave = { ...where, ...buryGear(player) };
+    this.grave = isGraveEmpty(grave) ? null : grave;
+
+    this.exitDungeon({ toVillage: true });
     player.teleport(VILLAGE_SPAWN.x, VILLAGE_SPAWN.y);
     player.hp = maxHp(player.stats);
     player.mana = maxMana(player.stats);
@@ -548,7 +571,24 @@ export class Game {
     this.projectiles = [];
     for (const zombie of this.zombies) zombie.calmDown();
     this.wasSafe = true;
-    this.toast("You died! Respawned in the village.");
+
+    if (lostPrevious) this.toast("Your previous grave was lost, along with everything in it.");
+    this.toast(this.grave ? "You died! Your gear lies in a grave where you fell. Go get it back." : "You died!");
+    this.autosave("death");
+  }
+
+  /** Pulls everything that fits out of the grave; it disappears once empty. */
+  recoverGrave() {
+    if (!this.grave) return false;
+    const emptied = recoverGrave(this.player, this.grave, this.newUid);
+    if (emptied) {
+      this.grave = null;
+      this.toast("Grave recovered. Your gear is back.");
+    } else {
+      this.toast("Inventory full: some items remain in your grave");
+    }
+    this.autosave("grave");
+    return emptied;
   }
 
   // ---- Events -------------------------------------------------------------

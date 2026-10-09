@@ -9,42 +9,49 @@
   <body>
     <canvas id="game"></canvas>
 
-    <div id="hud">
-      <div id="debug" class="panel"></div>
-      <button id="new-world" class="btn" type="button">New world</button>
+    <div id="game-ui" hidden>
+      <div id="hud">
+        <div id="debug" class="panel"></div>
+        <button id="menu-button" class="btn" type="button">Menu (Esc)</button>
+      </div>
+
+      <div id="hud-bottom">
+        <div class="bars panel">
+          <div class="status-row">
+            <span id="level" class="level"></span>
+            <span id="points-hint" class="points-hint" hidden></span>
+            <span id="gold" class="gold"></span>
+          </div>
+          <div id="hp-bar" class="bar hp"><div class="fill"></div><span class="label"></span></div>
+          <div id="mana-bar" class="bar mana"><div class="fill"></div><span class="label"></span></div>
+          <div id="xp-bar" class="bar xp"><div class="fill"></div><span class="label"></span></div>
+        </div>
+        <div id="weapons" class="weapons"></div>
+        <div id="potions" class="panel potions"></div>
+      </div>
+
+      <div id="controls" class="panel">
+        WASD / Arrows: move &middot; Mouse: aim &middot; Click / Space: attack &middot; 1 / 2 / 3: sword / bow / staff
+        &middot; Q / E: health / mana potion &middot; I: inventory &middot; C: character &middot; F: interact &middot; Esc: menu / close
+      </div>
+
+      <div id="save-indicator" class="save-indicator"></div>
     </div>
 
     <div id="toasts"></div>
-
-    <div id="hud-bottom">
-      <div class="bars panel">
-        <div class="status-row">
-          <span id="level" class="level"></span>
-          <span id="points-hint" class="points-hint" hidden></span>
-          <span id="gold" class="gold"></span>
-        </div>
-        <div id="hp-bar" class="bar hp"><div class="fill"></div><span class="label"></span></div>
-        <div id="mana-bar" class="bar mana"><div class="fill"></div><span class="label"></span></div>
-        <div id="xp-bar" class="bar xp"><div class="fill"></div><span class="label"></span></div>
-      </div>
-      <div id="weapons" class="weapons"></div>
-      <div id="potions" class="panel potions"></div>
-    </div>
-
     <div id="tooltip" class="tooltip panel" hidden></div>
-
-    <div id="controls" class="panel">
-      WASD / Arrows: move &middot; Mouse: aim &middot; Click / Space: attack &middot; 1 / 2 / 3: sword / bow / staff
-      &middot; Q / E: health / mana potion &middot; I: inventory &middot; C: character &middot; F: interact &middot; Esc: close
-    </div>
 
     <div id="modal-backdrop" class="modal-backdrop" hidden>
       <div id="modal" class="modal panel" role="dialog" aria-modal="true"></div>
     </div>
 
+    <div id="title" class="title-screen" hidden></div>
+
     <div id="file-warning" class="panel warning" hidden>
       This game must be served over HTTP. Browsers block ES modules on <code>file://</code>.<br />
-      Run <code>npm start</code> in the project folder, then open <code>http://localhost:8080</code>.
+      Run <code>npm start</code> in the project folder, then open the address it prints (normally
+      <code>http://localhost:8080</code>), or play online at
+      <a href="https://zachalot.github.io/DungeonCrawlerJS/">zachalot.github.io/DungeonCrawlerJS</a>.
     </div>
     <script>
       if (location.protocol === "file:") document.getElementById("file-warning").hidden = false;

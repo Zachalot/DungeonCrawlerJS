@@ -53,6 +53,10 @@ const COLORS = {
   portalOuter: "#4c1d95",
   portalMid: "#7c3aed",
   portalCore: "#ddd6fe",
+  tombstone: "#9ca3af",
+  tombstoneEdge: "#4b5563",
+  dirt: "#5b4636",
+  graveArrow: "#e5e7eb",
 };
 
 /** Draws every tile intersecting the camera view. */
@@ -117,6 +121,10 @@ export function drawEntities(ctx, game, alpha, camera) {
     });
   } else {
     drawables.push(...VILLAGE_NPCS.map((npc) => ({ y: (npc.ty + 0.5) * T, draw: () => drawNpc(ctx, npc, camera) })));
+    if (game.grave) {
+      const { x, y } = game.grave;
+      drawables.push({ y, draw: () => drawGrave(ctx, x - camera.x, y - camera.y) });
+    }
   }
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
@@ -290,6 +298,49 @@ export function drawInteractions(ctx, game, camera) {
   }
 }
 
+/** Arrow at the screen edge pointing to an off-screen grave, with its distance in tiles. */
+export function drawGraveArrow(ctx, game, alpha, camera) {
+  if (!game.grave || game.inDungeon) return;
+  const gx = game.grave.x - camera.x;
+  const gy = game.grave.y - camera.y;
+  const margin = 40;
+  if (gx >= 0 && gy >= 0 && gx <= camera.width && gy <= camera.height) return;
+
+  const pos = game.player.renderPosition(alpha);
+  const px = pos.x - camera.x;
+  const py = pos.y - camera.y;
+  const angle = Math.atan2(gy - py, gx - px);
+  // Walk from the player toward the grave until hitting the inset screen edge.
+  const scale = Math.min(
+    Math.abs((Math.cos(angle) > 0 ? camera.width - margin - px : margin - px) / (Math.cos(angle) || 1e-9)),
+    Math.abs((Math.sin(angle) > 0 ? camera.height - margin - py : margin - py) / (Math.sin(angle) || 1e-9)),
+  );
+  const ax = px + Math.cos(angle) * scale;
+  const ay = py + Math.sin(angle) * scale;
+
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(angle);
+  ctx.fillStyle = COLORS.graveArrow;
+  ctx.strokeStyle = COLORS.labelShadow;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(14, 0);
+  ctx.lineTo(-8, -9);
+  ctx.lineTo(-3, 0);
+  ctx.lineTo(-8, 9);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+  ctx.restore();
+
+  const tiles = Math.round(Math.hypot(game.grave.x - game.player.x, game.grave.y - game.player.y) / T);
+  ctx.font = "bold 11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  drawLabel(ctx, `Grave · ${tiles}`, ax, ay + 12, COLORS.graveArrow);
+}
+
 /** Torchlight: darkens a dungeon except for a soft circle around the player. */
 export function drawDarkness(ctx, game, alpha, camera) {
   if (!game.inDungeon) return;
@@ -327,6 +378,28 @@ function drawNpc(ctx, npc, camera) {
   ctx.lineTo(sx + 2, sy - 20);
   ctx.closePath();
   ctx.fill();
+}
+
+function drawGrave(ctx, sx, sy) {
+  drawShadow(ctx, sx, sy + 4, 11);
+  ctx.fillStyle = COLORS.dirt;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 8, 12, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = COLORS.tombstone;
+  ctx.strokeStyle = COLORS.tombstoneEdge;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(sx - 9, sy + 8);
+  ctx.lineTo(sx - 9, sy - 6);
+  ctx.arc(sx, sy - 6, 9, Math.PI, 0);
+  ctx.lineTo(sx + 9, sy + 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = COLORS.tombstoneEdge;
+  ctx.fillRect(sx - 1, sy - 9, 2, 11);
+  ctx.fillRect(sx - 4, sy - 6, 8, 2);
 }
 
 /** A wooden chest centered on (sx, sy); `open` draws the lid raised. */
