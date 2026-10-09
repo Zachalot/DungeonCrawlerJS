@@ -2,7 +2,7 @@
 
 > Status: **Implemented in M8** (v0.4) · Backend: Supabase (Postgres + Auth) · Client: browser, vanilla JS, no build step · Supersedes: the "Databases or servers" non-goal in the main design doc (§1.2)
 
-**Changes in v0.4 (implementation, branch `M8SupabaseMigration`):** the code for M2–M6 is built; the dashboard steps in M1 are yours to do (see the README's *Backend setup*). Where the build differs from the plan below:
+**Changes in v0.4 (implementation, branch `M8SupabaseMigration`):** the code for M2–M6 is built; the dashboard steps in M1 are yours to do (see the README's *Backend (Supabase)* section, which also documents the live schema). Where the build differs from the plan below:
 - **Guest saves keep their original keys** (`dungeonCrawler.slotN`) instead of moving to a `guest` namespace, so existing local saves need no migration. Account slots use `dungeonCrawler.<user id>.slotN`. The "legacy import" (M5) is a title-screen section that **copies** guest saves into empty account slots, leaving the guest copies in place.
 - **No separate `client.js`:** `js/cloud/auth.js` loads `supabase-js` with a dynamic `import()` and creates the client. If the CDN fails, the game still runs, guest-only, with a note on the title screen.
 - **Conflict prompt:** each copy has **Keep this one** and **Copy save code** buttons, rather than exporting the losing copy automatically.

@@ -75,11 +75,49 @@ Then open the address it prints, normally <http://localhost:8080>. If port 8080 
 
 Saves made without an account on `localhost` are separate from those on the live site, since browsers keep storage per address. Accounts work on both, because they use the same Supabase project.
 
-## Backend setup (Supabase)
+## Backend (Supabase)
 
-Accounts and cloud saves use a [Supabase](https://supabase.com) project. There is no server code of our own: Supabase hosts the database and the sign-in service, and the browser talks to them directly. The project URL and publishable key in [js/cloud/config.js](js/cloud/config.js) are public by design; row-level security in the database is what keeps each player's data private. **Never** put the secret (`service_role`) key in this repo.
+Accounts and cloud saves use a [Supabase](https://supabase.com) project. There is no server code of our own: Supabase hosts the Postgres database and the sign-in service, and the browser talks to them directly. The project URL and publishable key in [js/cloud/config.js](js/cloud/config.js) are public by design; row-level security in the database is what keeps each player's data private. **Never** put the secret (`service_role`) key in this repo.
 
-To set up a project (already done for the live site):
+### Where it lives
+
+| What | Link |
+|---|---|
+| Project dashboard | <https://supabase.com/dashboard/project/izutqcgxepfpqeffuetn> |
+| SQL Editor (run migrations and queries) | <https://supabase.com/dashboard/project/izutqcgxepfpqeffuetn/sql> |
+| Table Editor (browse saves and profiles) | <https://supabase.com/dashboard/project/izutqcgxepfpqeffuetn/editor> |
+| Authentication: users, providers, email, URL settings | <https://supabase.com/dashboard/project/izutqcgxepfpqeffuetn/auth/users> |
+| API keys | <https://supabase.com/dashboard/project/izutqcgxepfpqeffuetn/settings/api-keys> |
+| API endpoint used by the game | `https://izutqcgxepfpqeffuetn.supabase.co` |
+
+The project ref is `izutqcgxepfpqeffuetn`. It's on the free plan, which pauses a project after about a week with no activity: if sign-in or syncing stops working, check the dashboard and click **Restore** if it's paused. The game keeps working without an account meanwhile, and signed-in players' progress waits on their device until the project is back.
+
+### Schema
+
+Everything lives in the `public` schema, and is defined by the files in [supabase/migrations/](supabase/migrations/). Those files are the source of truth: change the database by adding a migration file, not by editing tables in the dashboard.
+
+**Tables**
+
+| Table | One row per | Columns | Who can do what (row-level security) |
+|---|---|---|---|
+| `profiles` | account | `id` (= `auth.users.id`), `username` (3–20 letters, digits, `_`; unique ignoring case), `created_at` | Any signed-in player can read usernames. A player can change only their own `username`. Rows are created by a trigger, never by the browser. |
+| `saves` | account × slot | `user_id`, `slot` (1–3), `version` (the save format version), `revision` (bumped on every write), `data` (the whole save as `jsonb`, max 1 MB), `updated_at` | A player can read, write, and delete only their own rows. |
+
+Emails and password hashes are **not** in these tables. They live in Supabase's own `auth.users` table, which the browser can't query.
+
+**Functions (stored procedures)**
+
+| Function | Called by | What it does |
+|---|---|---|
+| `save_slot(p_slot, p_version, p_data, p_base_revision)` | the game, on every cloud save | Writes a slot only if its stored `revision` still equals `p_base_revision` (0 = first save), and returns the new revision. Otherwise raises `revision_conflict`, which the game shows as a "saved on two devices" choice instead of overwriting. Runs with the caller's permissions, so row-level security still applies. Signed-in players only. |
+| `username_available(p_username)` | the sign-up form | Returns whether a username is free (ignoring case). Callable before signing in. |
+| `handle_new_user()` | trigger `on_auth_user_created` on `auth.users` | When an account is created, inserts its `profiles` row using the username from the sign-up form. If the username is taken, the sign-up fails. |
+
+To confirm the database matches the migrations, run [supabase/verify.sql](supabase/verify.sql) in the SQL Editor. It's read-only, and its comments say what each result should be.
+
+### Setting up a project
+
+Already done for the live site; these are the steps for a fresh project:
 
 1. **Database:** in the dashboard's **SQL Editor**, paste and run [supabase/migrations/0001_profiles.sql](supabase/migrations/0001_profiles.sql), then [0002_saves.sql](supabase/migrations/0002_saves.sql). Both are safe to re-run. Then run [supabase/verify.sql](supabase/verify.sql) and compare the results with its comments.
 2. **Authentication → Sign In / Providers:** Email on, minimum password length 8.
