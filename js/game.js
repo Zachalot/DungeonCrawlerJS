@@ -1,5 +1,6 @@
 import {
   ATTACK_BUFFER_TIME,
+  FOG_REVEAL_RADIUS,
   INTERACT_RANGE,
   MAX_ARROWS,
   OUT_OF_COMBAT_DELAY,
@@ -28,6 +29,7 @@ import { Spawner } from "./systems/spawner.js";
 import { maxHp, maxMana, weaponDamage } from "./systems/stats.js";
 import { hasLineOfSight, moveAndCollide } from "./world/collision.js";
 import { generateDungeon } from "./world/dungeon.js";
+import { Fog } from "./world/fog.js";
 import { dungeonForTile } from "./world/dungeons.js";
 import { VILLAGE_NPCS, VILLAGE_SPAWN } from "./world/village.js";
 import { World } from "./world/world.js";
@@ -87,6 +89,14 @@ export class Game {
     this.grave = null; // { x, y, equipment, items, arrows }; at most one
     this.playTime = 0; // s, unpaused
 
+    this.godMode = false; // dev panel: take no damage
+    this.showHitboxes = false; // dev panel: draw collision boxes and aggro radii
+
+    this.fog = new Fog(); // overworld exploration; saved
+    this.dungeonFog = new Fog(); // current dungeon only; reset on each visit
+    this.lastRevealKey = null;
+    this.revealAroundPlayer();
+
     // Zombies treat the village as solid so they can never enter it.
     this.zombieSolids = {
       isSolidAt: (tx, ty) => this.area.isSolidAt(tx, ty) || this.area.isSafeZone(tx, ty),
@@ -125,6 +135,7 @@ export class Game {
     this.updateZombies(dt);
     this.effects.update(dt);
 
+    this.revealAroundPlayer();
     const safe = this.isPlayerSafe();
     if (safe && !this.wasSafe) this.autosave("village");
     this.wasSafe = safe;
@@ -133,6 +144,20 @@ export class Game {
     if (!this.inDungeon) this.spawner.update(dt, this.time, player, this.zombies, this.view);
 
     if (player.hp <= 0) this.onPlayerDeath();
+  }
+
+  /** Fog for the current area: the saved overworld fog, or this dungeon visit's. */
+  get currentFog() {
+    return this.inDungeon ? this.dungeonFog : this.fog;
+  }
+
+  // Reveals the fog around the player, but only when they've moved to a new tile.
+  revealAroundPlayer() {
+    const { tileX, tileY } = this.player;
+    const key = `${this.area.kind}:${tileX},${tileY}`;
+    if (key === this.lastRevealKey) return;
+    this.lastRevealKey = key;
+    this.currentFog.reveal(tileX, tileY, FOG_REVEAL_RADIUS);
   }
 
   isPlayerSafe() {
@@ -230,7 +255,7 @@ export class Game {
   /** Applies armor and i-frames; returns the damage actually taken. */
   damagePlayer(rawDamage) {
     const player = this.player;
-    if (player.iframes > 0) return 0;
+    if (player.iframes > 0 || this.godMode) return 0;
     player.lastCombatTime = this.time;
 
     const taken = mitigate(rawDamage, player.armor, this.random);
@@ -388,7 +413,10 @@ export class Game {
     // Every visit restocks the zombies; only the chest stays looted.
     this.zombies = dungeon.zombieSpawns.map((spawn) => new Zombie(ENEMIES.zombie_l1, spawn, this.random));
     this.projectiles = [];
+    this.dungeonFog = new Fog();
+    this.lastRevealKey = null; // fresh fog: reveal even if we're standing where we did last visit
     this.player.teleport(dungeon.start.x, dungeon.start.y);
+    this.revealAroundPlayer();
     this.wasSafe = false;
     if (silent) return;
     const cleared = this.dungeonStatus(dungeon.id).cleared;

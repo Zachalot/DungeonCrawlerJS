@@ -4,8 +4,9 @@ import { WEAPONS } from "./data/weapons.js";
 import { Game } from "./game.js";
 import { STAT_KEYS } from "./systems/leveling.js";
 import { dungeonForCell } from "./world/dungeons.js";
+import { Fog } from "./world/fog.js";
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SLOT_COUNT = 3;
 const KEY_PREFIX = "dungeonCrawler.slot";
 const SIZE_WARNING_BYTES = 1024 * 1024;
@@ -25,6 +26,8 @@ export const MIGRATIONS = Object.freeze({
     const grave = save.grave && { ...save.grave, equipment: { sword: null, bow: null, staff: null, ...save.grave.equipment } };
     return { ...save, version: 2, nextUid, player: { ...save.player, equipment }, grave };
   },
+  // v3: fog of war. Older saves start with nothing explored; it fills in as you walk.
+  2: (save) => ({ ...save, version: 3, explored: {} }),
 });
 
 // ---- Serialization ----------------------------------------------------------
@@ -57,6 +60,7 @@ export function serializeGame(game) {
     stash: clone(game.stash),
     grave: clone(game.grave),
     dungeons: Object.fromEntries([...game.dungeonState].map(([id, state]) => [id, clone(state)])),
+    explored: game.fog.serialize(),
   };
 }
 
@@ -82,6 +86,7 @@ export function restoreGame(data, options = {}) {
   game.stash = clone(data.stash);
   game.grave = clone(data.grave);
   game.dungeonState = new Map(Object.entries(clone(data.dungeons)));
+  game.fog = Fog.deserialize(data.explored);
 
   const { location } = data.player;
   const [cellX, cellY] = location.type === "dungeon" ? location.id.split("_").map(Number) : [];
@@ -92,6 +97,8 @@ export function restoreGame(data, options = {}) {
   } else {
     game.player.teleport(data.player.x, data.player.y);
     game.wasSafe = game.isPlayerSafe();
+    game.lastRevealKey = null; // the fog was just replaced
+    game.revealAroundPlayer();
   }
   return game;
 }
@@ -133,6 +140,7 @@ export function validateSave(data) {
     if (piece && ITEMS[piece.defId].slot !== slot) fail(`${piece.defId} equipped in the ${slot} slot`);
   }
   if (typeof data.dungeons !== "object" || data.dungeons === null) fail("dungeons");
+  if (typeof data.explored !== "object" || data.explored === null) fail("explored");
   return data;
 }
 

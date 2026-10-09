@@ -23,8 +23,10 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 | Hold Q | Potion wheel: point at a potion and release Q to drink it, or release in the middle to cancel |
 | I | Inventory: drag gear onto the stick figure to equip it |
 | C | Character sheet (spend stat points) |
+| M | Full-screen map of everywhere you've explored: scroll to zoom, drag to pan |
 | F | Interact: talk, open, enter, leave, recover |
 | Esc | Pause menu, or close the open panel |
+| ` (backtick) | Dev panel (local play, or add `?dev` to the URL) |
 
 | Weapon | Damage | Cost | Notes |
 |---|---|---|---|
@@ -38,7 +40,8 @@ You start in the walled village, where zombies can't reach you. Gear up, head in
 - **Armor** reduces damage by `armor / (armor + 50)`. Leather and Iron sets are sold in the village; Steel only comes from dungeon chests.
 - **The village** has a Potion Vendor (NE), a General Vendor who also buys your loot (SW), a Respec Trainer (NW), and a Stash (SE). Anything in the stash is safe from death. Click or drag stacks between your bag and the stash, or use the separate "all items" and "all gold" buttons.
 - **Hover any item** to see its stats and what clicking it does.
-- **Menus pause the game.**
+- **Maps:** the minimap (top right) and the full map (M) show only what you've explored. The village is a gold square, unlooted dungeons are orange stairs icons, looted ones are grey with a ✓, and your grave is always marked. On the full map, scroll to zoom, drag to pan, and zoom in to see labels like "Lv 2" and "Looted".
+- **Menus pause the game,** except the potion wheel and the dev panel.
 
 ## Saving
 
@@ -69,7 +72,7 @@ Then open the address it prints, normally <http://localhost:8080>. If port 8080 
 
 Saves made on `localhost` are separate from saves made on the live site; browsers keep storage per address.
 
-For debugging, the running game is exposed as `window.game` in the browser console, for example `game.player.gold = 500`.
+**Dev panel:** press ` (backtick) while playing locally for cheats such as gold, XP, teleports, god mode, hitboxes, map reveal, kill nearby, and save JSON. On the live site, add `?dev` to the URL first: <https://zachalot.github.io/DungeonCrawlerJS/?dev>. The running game is also exposed as `window.game` in the browser console, for example `game.player.gold = 500`.
 
 ## Tests
 
@@ -85,6 +88,7 @@ Tests use Node's built-in test runner (Node 20+) and run automatically on every 
 - **Items:** inventory stacking, equipment, potions, vendors, buyback, stash
 - **Dungeons:** layout, room populations, chest loot weights, enter/exit, loot persistence and overflow
 - **Death and saving:** graves and the one-grave rule, save round-trips, migrations, validation, export/import, save slots
+- **Maps and tools:** fog of war, the map window, dungeon lookup, dev panel actions
 
 ## Project layout
 
@@ -98,8 +102,8 @@ js/
   data/           weapons, enemies, items, vendors, drop and chest loot tables
   entities/       player, zombie, projectile
   systems/        combat math, stats, leveling, inventory, economy, consumables, loot, death, regen, spawner, effects
-  world/          overworld chunks, tiles, village, dungeon placement and interiors, bounds, collision
-  ui/             HUD, panels (character, inventory, vendors, stash, chest, trainer, pause), title, tooltips, toasts
+  world/          overworld chunks, tiles, village, dungeon placement and interiors, fog of war, bounds, collision
+  ui/             HUD, panels (character, inventory, vendors, stash, chest, trainer, pause, map), title, quick wheel, minimap, dev panel, tooltips, toasts
   render.js       canvas drawing
 tests/            node:test suites
 .github/          CI workflow and issue templates
@@ -115,7 +119,7 @@ tests/            node:test suites
 | M4 | Items + vendors | ✅ Done |
 | M5 | Dungeons | ✅ Done |
 | M6 | Persistence + death | ✅ Done |
-| M7 | Maps + polish (minimap, fog of war, dev panel) | |
+| M7 | Maps + polish (minimap, fog of war, dev panel) | ✅ Done |
 
 ### Endless world later
 

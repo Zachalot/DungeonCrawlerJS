@@ -369,13 +369,24 @@ Starter Sword, Starter Bow, and Starter Staff (equipped), 30 arrows, 2 Minor Hea
   - Weapon icons 1/2/3 (the equipped one highlighted, with a cooldown sweep)
   - Potion totals with a "Hold Q" reminder
   - Grave direction arrow (when a grave exists)
-- **Minimap** (top right, ~160 px):
+- **Minimap** (top right, 160 px, with the controls hint underneath):
+  - A 40 × 40-tile window centered on the player (4 px per tile), refreshed ten times a second.
   - Shows explored tiles only, under fog of war.
-  - Icons: village, discovered dungeon entrances (looted ones greyed out), grave, and player.
-  - **M** opens a full-screen map with the same layers.
+- **Map markers** have fixed pixel sizes, so they stay readable at any zoom:
+  - **Village:** a filled gold square, at least 14 px.
+  - **Dungeons:** an orange stairs icon while unlooted, and a grey ✓ icon once looted.
+  - **Your grave:** a white cross, always shown, even in fog.
+  - **You:** a blue arrow pointing where you aim.
+  - **In dungeons:** the exit portal, the chest, and the ladder, once you've seen them.
+- **Full-screen map (M):**
+  - Opens zoomed in on you, at 5 px per tile. Dungeons, being small, open whole.
+  - **Scroll to zoom** around the cursor and **drag to pan**. Buttons do the same: zoom −/+, Center on me, and Whole map.
+  - Zoom runs from fitting the whole area up to 16 px per tile. Panning stops at the area's edges.
+  - Labels appear once zoomed in to 3 px per tile or more: "Village", "Lv 2", "Lv 1 · Looted", "Your grave", and in dungeons "Exit", "Treasure", "Ladder".
+  - The legend's swatches use the same shapes as the icons. Like the other menus, the map pauses the game.
 - **Fog of war:**
-  - Tiles within an 8-tile radius of the player become explored.
-  - Explored state is tracked per chunk as a bitset and saved (§13.1).
+  - Tiles within an 8-tile radius of the player become explored, updated whenever they step onto a new tile.
+  - Overworld exploration is tracked per chunk as a bitset and saved (§13.1). Dungeon exploration lasts for one visit.
   - The world view is never fogged in the POC; fog applies only to the maps.
   - This same exploration hook is where endless generation will trigger later.
 - **Panels:**
@@ -394,10 +405,13 @@ Starter Sword, Starter Bow, and Starter Staff (equipped), 30 arrows, 2 Minor Hea
 ## 13. Persistence (localStorage)
 
 ### 13.1 Save schema
-As implemented in `js/save.js` (v2; v2 added the `sword` / `bow` / `staff` equipment slots, and the v1 → v2 migration arms old characters with starter weapons):
+As implemented in `js/save.js` (v3). Each version step has a migration:
+- **v2** added the `sword` / `bow` / `staff` equipment slots; the v1 → v2 migration arms old characters with starter weapons.
+- **v3** added `explored`; the v2 → v3 migration starts old saves with an empty map.
+
 ```json
 {
-  "version": 2,
+  "version": 3,
   "seed": 1234567,
   "savedAt": "2026-10-09T12:00:00.000Z",
   "playTime": 754,
@@ -416,7 +430,7 @@ As implemented in `js/save.js` (v2; v2 added the `sword` / `bow` / `staff` equip
   "dungeons": { "3_5": { "cleared": true, "chest": { "gold": 0, "items": [{ "arrows": 100 }] } } }
 }
 ```
-- `dungeons` is keyed by dungeon-cell coordinates. It's a sparse map rather than a fixed array, so it works for an endless world without a migration. M7 adds a similarly keyed `explored` map of per-chunk fog bitsets.
+- `dungeons` is keyed by dungeon-cell coordinates, and `explored` by chunk coordinates (`"cx,cy"` → a base64 1024-bit bitset). Both are sparse maps rather than fixed arrays, so they work for an endless world without a migration. A fully explored 400 × 400 world adds about 29 KB.
 - A chest's contents are rolled on first open and saved from then on. `chest: null` means the chest is unopened.
 - Live enemy positions are **not** saved. They are regenerated from the seed on load.
 - **A save made inside a dungeon resumes at that dungeon's exit portal,** with a fresh set of zombies.
@@ -504,13 +518,15 @@ js/
 - **Generation is pure:** `generateChunk` and `generateDungeon` depend only on `(seed, coords)`. This is what makes the endless world possible later.
 
 ### 14.4 Dev panel (backtick key)
-- Add gold, add XP, or level up
-- Teleport to the village, the nearest dungeon, or the grave
-- Toggle god mode
-- Show collision boxes and aggro radii
-- Reveal the full map
-- Kill all nearby enemies
-- Print the current save JSON
+- Add gold (+500), add XP (+100), or level up
+- Teleport to the village, the nearest dungeon, or the grave (leaving a dungeon first if needed)
+- Toggle god mode (no damage)
+- Show collision boxes, zombie aggro (yellow) and attack (red) radii, the sword's reach, and projectile radii
+- Reveal the full map of the current area
+- Kill all zombies within 12 tiles, with normal XP and drops
+- Print the current save JSON (shown in the panel and logged to the console)
+
+**Availability:** the panel is always available when running locally (`localhost`, `127.0.0.1`). On the live site it needs `?dev` in the URL, for example `https://zachalot.github.io/DungeonCrawlerJS/?dev`, so regular playtesters don't stumble into cheats. It floats beside the HUD and doesn't pause the game. `window.game` stays available in the browser console for anything the panel doesn't cover.
 
 ---
 
@@ -524,7 +540,7 @@ js/
 | M4 | Items + vendors | Inventory, equipment, armor mitigation, both vendors with buyback, potions with cooldown, stash. *Tooltips with comparison were pulled forward from M7.* |
 | M5 | Dungeons | Entrances spawn per cell, dungeons generate, chest loot works, cleared state, level label on entrances. *Dungeons also got a torchlight vignette.* |
 | M6 | Persistence + death | Save slots, autosave triggers, migration, export/import, graves with one-grave rule. *The grave arrow was pulled forward from M7.* |
-| M7 | Maps + polish | Minimap, large map, fog of war, dev panel |
+| M7 | Maps + polish | Minimap, large map, fog of war, dev panel. *Save format v3 adds the explored map.* |
 
 ---
 
