@@ -74,7 +74,10 @@ The player carries all three weapons and swaps between them instantly; weapons a
 - Level 1 Zombie XP: 10.
 - **The player fully heals HP and mana on level-up.**
 - **The Character screen previews derived stats** (HP, mana, and all three weapon damages, before → after) while points are pending. Points are committed only when the player clicks Confirm.
-- **Respec Trainer** in the village: resets all spent points for `50 g × level`. **[Default]**
+- **Respec Trainer** in the village: resets all spent points for `50 g × level`. **[Default]** After a respec, current HP and mana are clamped to the new maximums.
+- Excess XP carries over, and one big XP grant can level up several times.
+- Committing Endurance or Intellect points raises *current* HP or mana by the same amount as the maximum, so allocating mid-fight never leaves you "missing" HP.
+- **Menus pause the game.** The character sheet and all NPC dialogs stop the simulation while open.
 
 ### 4.3 Regeneration
 
@@ -93,10 +96,11 @@ Potions are the burst refill. Regen is tracked as a fractional accumulator, whil
 
 | Weapon | Damage | Cost | Range | Cooldown | Special |
 |---|---|---|---|---|---|
-| **Sword** | `STR × 1` | None | Melee, 90° arc in front, ~1.2 tiles | 0.4 s | **Cleave** (hits every enemy in the arc) + **knockback** 0.5 tiles |
+| **Sword** | `STR × 1` | None | Melee, 90° arc in front, 1.7 tiles (reaches any zombie whose body overlaps the arc) | 0.4 s | **Cleave** (hits every enemy in the arc) + **knockback** 0.5 tiles |
 | **Bow** | `floor(DEX × 1.5)` | 1 arrow | Projectile, ~8 tiles | 0.6 s | Can't fire with 0 arrows ("No arrows!" toast) |
 | **Staff** | `floor(INT × 1.5)` | 5 mana | Projectile, ~7 tiles | 0.8 s | Can't cast with < 5 mana ("Not enough mana" toast) |
 
+- **Attack input:** every click or Space press counts, even a tap released before the next frame. It fires on the next simulation step (≤16 ms) if the weapon is ready. A press during the last 0.2 s of a cooldown is buffered and fires the instant the cooldown ends. Earlier presses are dropped, so a stale click never fires late. Holding the button attacks on every cooldown.
 - Projectiles are stopped by rocks, trees, and walls, and hit the first enemy in their path.
 - Weapon identities:
   - **Sword:** free, fast, strong against crowds.
@@ -227,7 +231,7 @@ Chest contents are rolled once when the chest is first opened, and the result is
 | Aggro radius | 6 tiles (requires line of sight) |
 | De-aggro | >12 tiles away, or the player enters the village |
 | XP | 10 |
-| Drops | 60% chance: 1–3 g; 10% chance: 2–5 arrows |
+| Drops | 60% chance: 1–3 g; 10% chance: 2–5 arrows. Auto-collected on kill, with no ground items. |
 
 **Starting balance:** at 2 damage, a fresh player (50 HP, no armor) survives 25 hits. Starting weapons kill a zombie in 2 hits (sword at 5 damage, fireball and arrow at 7 damage).
 
@@ -484,7 +488,7 @@ js/
 |---|---|---|
 | M1 | World + movement | Seeded chunked overworld, village, rocks and trees render; the player walks with collision; the camera follows |
 | M2 | Combat | Sword (cleave + knockback), bow (arrows), and staff (mana) work; Level 1 Zombies chase, wind up, attack, and die; i-frames and damage numbers work. *Regen was pulled forward from M3 so the staff stays usable, and death temporarily respawns you in the village with no penalty until M6.* |
-| M3 | Progression | XP, level-up full heal, stat allocation with preview, Respec Trainer |
+| M3 | Progression | XP, level-up full heal, stat allocation with preview, Respec Trainer. *Zombie gold/arrow drops were pulled forward from M4 so the respec can be paid for.* |
 | M4 | Items + vendors | Inventory, equipment, armor mitigation, both vendors with buyback, potions with cooldown, stash |
 | M5 | Dungeons | Entrances spawn per cell, dungeons generate, chest loot works, cleared state, level label on entrances |
 | M6 | Persistence + death | Save slots, autosave triggers, migration, export/import, graves with one-grave rule |

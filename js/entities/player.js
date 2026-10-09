@@ -1,4 +1,4 @@
-import { PLAYER_SIZE, PLAYER_SPEED, STARTING_ARROWS, STARTING_STATS, TILE_SIZE } from "../config.js";
+import { PLAYER_SIZE, PLAYER_SPEED, STARTING_ARROWS, STARTING_GOLD, STARTING_STATS, TILE_SIZE } from "../config.js";
 import { maxHp, maxMana } from "../systems/stats.js";
 import { moveAndCollide } from "../world/collision.js";
 
@@ -11,6 +11,10 @@ export class Player {
     this.half = (PLAYER_SIZE * TILE_SIZE) / 2;
     this.aimAngle = 0;
 
+    this.level = 1;
+    this.xp = 0; // progress toward the next level
+    this.unspentPoints = 0;
+    this.gold = STARTING_GOLD;
     this.stats = { ...STARTING_STATS };
     this.hp = maxHp(this.stats);
     this.mana = maxMana(this.stats);
@@ -19,6 +23,7 @@ export class Player {
 
     this.weapon = "sword";
     this.attackCooldown = 0; // s until the next attack is allowed
+    this.attackBuffer = 0; // s a recent click keeps waiting for the cooldown
     this.iframes = 0; // s of remaining invulnerability
     this.flash = 0; // s of remaining hit flash
     this.lastCombatTime = -Infinity;

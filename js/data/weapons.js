@@ -9,7 +9,7 @@ export const WEAPONS = Object.freeze({
     multiplier: 1,
     cooldown: 0.4,
     kind: "melee",
-    range: 1.2,
+    range: 1.7,
     arcDegrees: 90,
     knockback: 0.5,
   },

@@ -29,7 +29,18 @@ function zombieNear(game, dx, dy) {
   return zombie;
 }
 
-const idleControls = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, attack: false, weapon: null };
+const idleControls = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, attack: false, attackPressed: false, weapon: null };
+
+/** Wraps game.attack; returns a function reporting how many attacks have fired. */
+function countAttacks(game) {
+  let count = 0;
+  const attack = game.attack.bind(game);
+  game.attack = () => {
+    count++;
+    attack();
+  };
+  return () => count;
+}
 
 describe("mitigate", () => {
   it("returns raw damage with no armor", () => {
@@ -118,6 +129,56 @@ describe("sword", () => {
     assert.ok(zombie.dead);
     assert.equal(game.spawner.alive.has(zombie.spawnId), false);
     assert.ok(game.spawner.respawnAt.get(zombie.spawnId) > game.time);
+  });
+
+  it("reaches 1.7 tiles plus the zombie's half-width", () => {
+    const game = newGame();
+    game.player.aimAngle = 0;
+    const edge = zombieNear(game, 1.7 + 0.3, 0); // body edge just inside reach
+    const beyond = zombieNear(game, 1.7 + 0.4, 0.2);
+    game.attack();
+    assert.equal(edge.hp, 5);
+    assert.equal(beyond.hp, 10);
+  });
+
+  it("still reaches a zombie that the previous swing knocked back", () => {
+    const game = newGame();
+    game.player.aimAngle = 0;
+    const zombie = zombieNear(game, 1.0, 0);
+    game.attack();
+    for (let i = 0; i < 7; i++) zombie.update(1 / 60, fakeZombieCtx(game.player));
+    game.player.attackCooldown = 0;
+    game.attack();
+    assert.ok(zombie.dead, `zombie at ${(zombie.x - game.player.x) / T} tiles survived`);
+  });
+
+  it("swings on a tap that was released before the game's next step", () => {
+    const game = newGame();
+    game.update(1 / 60, { ...idleControls, attack: false, attackPressed: true });
+    assert.equal(game.effects.swings.length, 1);
+  });
+
+  it("buffers a click made near the end of the cooldown and fires the moment it ends", () => {
+    const game = newGame();
+    const attacks = countAttacks(game);
+    game.update(1 / 60, { ...idleControls, attackPressed: true });
+    // Advance until 0.1 s of cooldown remains, then tap once.
+    while (game.player.attackCooldown > 0.1) game.update(1 / 60, idleControls);
+    game.update(1 / 60, { ...idleControls, attackPressed: true });
+    assert.equal(attacks(), 1, "not before the cooldown ends");
+    let steps = 0;
+    while (attacks() < 2 && steps++ < 30) game.update(1 / 60, idleControls);
+    assert.equal(attacks(), 2);
+    assert.ok(steps <= 7, `fired ${steps} steps after the click`);
+  });
+
+  it("drops a click made early in the cooldown instead of firing it late", () => {
+    const game = newGame();
+    const attacks = countAttacks(game);
+    game.update(1 / 60, { ...idleControls, attackPressed: true });
+    game.update(1 / 60, { ...idleControls, attackPressed: true });
+    for (let i = 0; i < 40; i++) game.update(1 / 60, idleControls);
+    assert.equal(attacks(), 1);
   });
 
   it("is free and respects its cooldown", () => {

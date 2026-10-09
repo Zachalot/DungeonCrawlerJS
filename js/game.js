@@ -1,15 +1,24 @@
-import { OUT_OF_COMBAT_DELAY, PLAYER_IFRAMES, RESPAWN_IFRAMES, TILE_SIZE } from "./config.js";
+import {
+  ATTACK_BUFFER_TIME,
+  INTERACT_RANGE,
+  OUT_OF_COMBAT_DELAY,
+  PLAYER_IFRAMES,
+  RESPAWN_IFRAMES,
+  TILE_SIZE,
+} from "./config.js";
 import { ENEMIES } from "./data/enemies.js";
 import { WEAPONS } from "./data/weapons.js";
 import { Player } from "./entities/player.js";
 import { Projectile } from "./entities/projectile.js";
 import { isInArc, mitigate } from "./systems/combat.js";
 import { Effects } from "./systems/effects.js";
+import { allocatePoints, grantXp, respec, respecCost } from "./systems/leveling.js";
+import { collectDrops, rollDrops } from "./systems/loot.js";
 import { applyRegen } from "./systems/regen.js";
 import { Spawner } from "./systems/spawner.js";
 import { maxHp, maxMana, weaponDamage } from "./systems/stats.js";
 import { hasLineOfSight, moveAndCollide } from "./world/collision.js";
-import { VILLAGE_SPAWN } from "./world/village.js";
+import { VILLAGE_NPCS, VILLAGE_SPAWN } from "./world/village.js";
 import { World } from "./world/world.js";
 
 const T = TILE_SIZE;
@@ -18,6 +27,8 @@ export const TextColor = Object.freeze({
   dealt: "#f8fafc",
   taken: "#ef4444",
   blocked: "#9ca3af",
+  reward: "#fbbf24",
+  levelUp: "#a3e635",
 });
 
 /**
@@ -43,7 +54,10 @@ export class Game {
     };
   }
 
-  /** `controls`: { move: {x, y}, aim: {x, y} world px, attack: bool, weapon: id | null }. */
+  /**
+   * `controls`: { move: {x, y}, aim: {x, y} world px, attack: held bool,
+   * attackPressed: bool (a click/press since the last step), weapon: id | null }.
+   */
   update(dt, controls) {
     this.time += dt;
     const player = this.player;
@@ -51,10 +65,16 @@ export class Game {
     if (controls.weapon && WEAPONS[controls.weapon]) player.weapon = controls.weapon;
     player.update(dt, controls.move, controls.aim, this.world);
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
+    player.attackBuffer = Math.max(0, player.attackBuffer - dt);
     player.iframes = Math.max(0, player.iframes - dt);
     player.flash = Math.max(0, player.flash - dt);
 
-    if (controls.attack && player.attackCooldown === 0) this.attack();
+    // A press fires on this step if ready; one made late in a cooldown fires the moment it ends.
+    if (controls.attackPressed) player.attackBuffer = ATTACK_BUFFER_TIME;
+    if ((controls.attack || player.attackBuffer > 0) && player.attackCooldown === 0) {
+      player.attackBuffer = 0;
+      this.attack();
+    }
 
     this.updateProjectiles(dt);
     this.updateZombies(dt);
@@ -129,7 +149,49 @@ export class Game {
     if (zombie.takeHit(damage, knockbackAngle, knockbackTiles)) {
       this.effects.addPuff(zombie.x, zombie.y, "#6b8f5e");
       this.spawner.onZombieKilled(zombie, this.time);
+      this.rewardKill(zombie);
     }
+  }
+
+  rewardKill(zombie) {
+    const player = this.player;
+    const drops = rollDrops(zombie.def.dropTable, this.random);
+    collectDrops(player, drops);
+    const rewards = [`+${zombie.def.xp} XP`];
+    if (drops.gold) rewards.push(`+${drops.gold} g`);
+    if (drops.arrows) rewards.push(`+${drops.arrows} arrows`);
+    this.effects.addText(zombie.x, zombie.y - zombie.half - 14, rewards.join("  "), TextColor.reward);
+
+    const levels = grantXp(player, zombie.def.xp);
+    if (levels > 0) {
+      this.effects.addText(player.x, player.y - player.half - 14, "LEVEL UP!", TextColor.levelUp);
+      this.toast(`Level up! You are level ${player.level}. Press C to spend ${player.unspentPoints} stat points.`);
+    }
+  }
+
+  /** The village NPC within interact range of the player, or null. */
+  nearbyNpc() {
+    const player = this.player;
+    return (
+      VILLAGE_NPCS.find((npc) => Math.hypot((npc.tx + 0.5) * T - player.x, (npc.ty + 0.5) * T - player.y) <= INTERACT_RANGE * T) ??
+      null
+    );
+  }
+
+  /** Commits pending stat points from the character sheet. */
+  allocateStats(pending) {
+    return allocatePoints(this.player, pending);
+  }
+
+  /** Buys a respec from the trainer; toasts the outcome. */
+  buyRespec() {
+    const cost = respecCost(this.player.level);
+    if (!respec(this.player)) {
+      this.toast(`A respec costs ${cost} g. You have ${this.player.gold} g.`);
+      return false;
+    }
+    this.toast(`Stats reset for ${cost} g. ${this.player.unspentPoints} points to spend.`);
+    return true;
   }
 
   /** Applies armor and i-frames; returns the damage actually taken. */
