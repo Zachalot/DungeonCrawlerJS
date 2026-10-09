@@ -49,7 +49,7 @@ export class Hud {
 
     const hpPotions = POTION_PRIORITY.hp.reduce((n, id) => n + countItem(player.inventory, id), 0);
     const manaPotions = POTION_PRIORITY.mana.reduce((n, id) => n + countItem(player.inventory, id), 0);
-    this.setText(this.potions, `Q ♥ ${hpPotions}   E ◆ ${manaPotions}`);
+    this.setText(this.potions, `Hold Q   ♥ ${hpPotions}   ◆ ${manaPotions}`);
     this.potions.classList.toggle("cooling", player.potionCooldown > 0);
 
     this.updateDebug(frameTime, game);
